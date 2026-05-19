@@ -1,6 +1,6 @@
-# git-release
+# StackRadar
 
-Daily GitHub release digest — fetches releases, analyses them with Groq LLM, enriches CVEs via NIST NVD, and renders a bento-style web page.
+Daily release intelligence — fetches GitHub releases, analyses them with OpenAI gpt-4o-mini, and renders a bento-style digest for tech leads.
 
 ## Architecture
 
