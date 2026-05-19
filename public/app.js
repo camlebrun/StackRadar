@@ -141,7 +141,7 @@ function renderAdvisories(advisories) {
   container.innerHTML = advisories.map(a => {
     const sev  = a.severity ?? 'unknown';
     const an   = a.analysis ?? {};
-    const ghsa = a.ghsa_id ? `<a class="advisory-id" href="${esc(a.html_url ?? a.url ?? '#')}" target="_blank" rel="noopener">${esc(a.ghsa_id)}</a>` : '';
+    const ghsa = a.ghsa_id ? `<span class="advisory-id">${esc(a.ghsa_id)}</span>` : '';
     const cve  = a.cve_id  ? `<span class="advisory-cve">${esc(a.cve_id)}</span>` : '';
     const action = an.action ? `<span class="advisory-action">${esc(ACTION_LABEL[an.action] ?? an.action)}</span>` : '';
     const steps = (an.action_steps ?? []).map(s => `<li>${esc(s)}</li>`).join('');
@@ -153,7 +153,7 @@ function renderAdvisories(advisories) {
   </div>
   <p class="advisory-repo">${esc(a.repo)}</p>
   <p class="advisory-summary">${esc(a.summary)}</p>
-  ${an.impact ? `<p class="advisory-desc">${esc(an.impact)}</p>` : `<p class="advisory-desc">${esc((a.description ?? '').slice(0, 300))}</p>`}
+  <p class="advisory-desc">${esc(stripMd(an.impact || a.description || '').slice(0, 280))}</p>
   ${an.affected_versions ? `<p class="advisory-meta">Affected: <strong>${esc(an.affected_versions)}</strong>${an.fix_version ? ` → Fixed in: <strong>${esc(an.fix_version)}</strong>` : ''}</p>` : ''}
   ${action}
   ${steps ? `<ul class="advisory-steps">${steps}</ul>` : ''}
@@ -263,6 +263,19 @@ function renderCveTable(records) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+function stripMd(str) {
+  return String(str ?? '')
+    .replace(/#{1,6}\s+/g, '')        // headings
+    .replace(/\*\*(.+?)\*\*/g, '$1') // bold
+    .replace(/\*(.+?)\*/g, '$1')     // italic
+    .replace(/`{1,3}[^`]*`{1,3}/g, '') // code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+    .replace(/^[-*+]\s+/gm, '')      // bullets
+    .replace(/\n{2,}/g, ' ')         // double newlines → space
+    .replace(/\n/g, ' ')
+    .trim();
+}
+
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')

@@ -441,7 +441,7 @@ header h1 {
 }
 
 .advisory-card {
-  display: flex; flex-direction: column; gap: .5rem;
+  display: block;
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 4px solid var(--border);
@@ -467,9 +467,8 @@ header h1 {
 .advisory-id {
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: .8rem; font-weight: 700;
-  color: var(--accent); text-decoration: none;
+  color: var(--accent);
 }
-.advisory-id:hover { text-decoration: underline; }
 
 .advisory-cve {
   font-family: "SF Mono", "Fira Code", monospace;
