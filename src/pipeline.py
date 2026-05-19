@@ -70,12 +70,13 @@ def run_pipeline(
     for repo_cfg in repos:
         repo = repo_cfg["repo"]
         min_version = repo_cfg.get("min_version")
+        stable_only = repo_cfg.get("stable_only", False)
         owner, name = repo.split("/", 1)
         try:
             cursor = get_cursor(s3, bucket, owner, name)
             if cursor is None:
-                releases = backfill_releases(owner, name, github_token, min_version)
-                logger.info("[%s] backfill (min=%s): %d releases", repo, min_version, len(releases))
+                releases = backfill_releases(owner, name, github_token, min_version, stable_only)
+                logger.info("[%s] backfill (min=%s, stable=%s): %d releases", repo, min_version, stable_only, len(releases))
             else:
                 releases = get_new_releases(owner, name, cursor, github_token)
                 logger.info("[%s] incremental: %d new since %s", repo, len(releases), cursor)
