@@ -10,10 +10,7 @@
 <body>
   <header>
     <div class="header-top">
-      <div>
-        <h1>📡 StackRadar</h1>
-        <p class="subtitle">Daily release intelligence — AI summaries · severity tracking · tech lead digest</p>
-      </div>
+      <h1>📡 StackRadar</h1>
     </div>
 
     <div class="tabs">
@@ -21,49 +18,36 @@
         Digest <span class="badge" id="digest-count"></span>
       </button>
       <button class="tab" data-tab="security">
-        Security Advisories <span class="badge badge-cve" id="advisory-count"></span>
+        Security <span class="badge badge-cve" id="advisory-count"></span>
       </button>
     </div>
 
     <div class="toolbar">
       <input type="search" id="search" placeholder="Search repo, tag, keyword…" autocomplete="off" />
 
-      <!-- Severity filters -->
       <div class="filter-group">
         <span class="filter-label">Severity</span>
         <div class="sev-filters">
           <button class="sev-btn active" data-sev="all">All</button>
-          <button class="sev-btn" data-sev="critical" title="RCE, auth bypass, data loss — upgrade immediately">
-            <span class="sev sev-critical">critical</span>
-          </button>
-          <button class="sev-btn" data-sev="high" title="Security fix or data integrity risk — plan upgrade this sprint">
-            <span class="sev sev-high">high</span>
-          </button>
-          <button class="sev-btn" data-sev="medium" title="Breaking change requiring migration — schedule before next release">
-            <span class="sev sev-medium">medium</span>
-          </button>
-          <button class="sev-btn" data-sev="low" title="Minor behaviour change, low risk — review at next cycle">
-            <span class="sev sev-low">low</span>
-          </button>
-          <button class="sev-btn" data-sev="none" title="Pure feature or performance — no action required">
-            <span class="sev sev-none">none</span>
-          </button>
-        </div>
-
-        <!-- Legend -->
-        <div class="sev-legend">
-          <span class="legend-title">What do these mean?</span>
-          <div class="legend-items">
-            <span><span class="sev sev-critical">critical</span> RCE · auth bypass · data loss</span>
-            <span><span class="sev sev-high">high</span> Security fix · data integrity risk</span>
-            <span><span class="sev sev-medium">medium</span> Breaking change · migration needed</span>
-            <span><span class="sev sev-low">low</span> Minor behaviour change</span>
-            <span><span class="sev sev-none">none</span> Feature · perf · no action needed</span>
-          </div>
+          <button class="sev-btn" data-sev="critical" title="RCE, auth bypass, data loss">critical</button>
+          <button class="sev-btn" data-sev="high" title="Security fix, data integrity risk">high</button>
+          <button class="sev-btn" data-sev="medium" title="Breaking change, migration needed">medium</button>
+          <button class="sev-btn" data-sev="low" title="Minor behaviour change">low</button>
+          <button class="sev-btn" data-sev="none" title="Feature, perf, no action needed">none</button>
         </div>
       </div>
 
-      <!-- Repo filters (populated by JS) -->
+      <div class="filter-group sev-legend">
+        <span class="legend-title">Legend</span>
+        <div class="legend-items">
+          <span><span class="sev sev-critical">critical</span> RCE · auth bypass</span>
+          <span><span class="sev sev-high">high</span> Security fix</span>
+          <span><span class="sev sev-medium">medium</span> Breaking change</span>
+          <span><span class="sev sev-low">low</span> Minor change</span>
+          <span><span class="sev sev-none">none</span> Feature · perf</span>
+        </div>
+      </div>
+
       <div class="filter-group">
         <span class="filter-label">Repo</span>
         <div class="repo-filters" id="repo-filters"></div>
@@ -77,17 +61,13 @@
       <p id="empty-digest" class="empty-state hidden">No releases match your filter.</p>
       <p id="loading" class="loading">Loading releases…</p>
     </section>
-
   </main>
 
-  </main>
-
-  <!-- Security tab — full page -->
   <section id="tab-security" class="tab-panel hidden">
     <div class="advisory-page">
       <div class="advisory-page-header">
         <h2>🔒 Security Advisories</h2>
-        <p>Published security advisories from the GitHub Security Advisory Database for tracked repositories.</p>
+        <p>Published security advisories from the GitHub Security Advisory Database.</p>
       </div>
       <div id="advisory-list" class="advisory-grid"></div>
       <p id="empty-advisories" class="empty-state hidden">No security advisories found.</p>
