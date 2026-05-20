@@ -6,6 +6,7 @@
 const DIGEST_URL = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev/digest.json';
 
 let allRecords = [];
+let allAdvisories = [];
 let activeSev = 'all';
 let activeRepo = 'all';
 
@@ -97,10 +98,13 @@ async function loadDigest() {
   try {
     const resp = await fetch(DIGEST_URL);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    allRecords = await resp.json();
+    const data = await resp.json();
+    allRecords = Array.isArray(data) ? data : (data.releases ?? []);
+    allAdvisories = Array.isArray(data) ? [] : (data.advisories ?? []);
     loading.classList.add('hidden');
     renderGrid(allRecords);
-    updateCounts(allRecords);
+    renderAdvisories(allAdvisories);
+    updateCounts(allRecords, allAdvisories);
     buildRepoFilters(allRecords);
   } catch (err) {
     loading.className = 'empty-state';
@@ -108,8 +112,54 @@ async function loadDigest() {
   }
 }
 
-function updateCounts(records) {
+function updateCounts(records, advisories) {
   document.getElementById('digest-count').textContent = records.length || '';
+  const sevEl = document.getElementById('advisory-count');
+  if (sevEl) sevEl.textContent = advisories.length || '';
+}
+
+// ── Security advisories ────────────────────────────────────────────────────
+const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function renderAdvisories(advisories) {
+  const container = document.getElementById('advisory-list');
+  const empty = document.getElementById('empty-advisories');
+  if (!container) return;
+
+  if (!advisories.length) {
+    empty?.classList.remove('hidden');
+    return;
+  }
+
+  const ACTION_LABEL = {
+    'upgrade-immediately': '🚨 Upgrade immediately',
+    'upgrade-this-sprint': '⚠️ Upgrade this sprint',
+    'monitor': '👀 Monitor',
+    'no-action': '✅ No action needed',
+  };
+
+  container.innerHTML = advisories.map(a => {
+    const sev  = a.severity ?? 'unknown';
+    const an   = a.analysis ?? {};
+    const ghsa = a.ghsa_id ? `<span class="advisory-id">${esc(a.ghsa_id)}</span>` : '';
+    const cve  = a.cve_id  ? `<span class="advisory-cve">${esc(a.cve_id)}</span>` : '';
+    const action = an.action ? `<span class="advisory-action">${esc(ACTION_LABEL[an.action] ?? an.action)}</span>` : '';
+    const steps = (an.action_steps ?? []).map(s => `<li>${esc(s)}</li>`).join('');
+    const link = a.html_url ?? a.url ?? '#';
+    return `<a class="advisory-card sev-border-${sev}" href="${esc(link)}" target="_blank" rel="noopener">
+  <div class="advisory-header">
+    <div class="advisory-ids">${ghsa}${cve}</div>
+    <span class="sev sev-${sev}">${sev}</span>
+  </div>
+  <p class="advisory-repo">${esc(a.repo)}</p>
+  <p class="advisory-summary">${esc(a.summary)}</p>
+  <p class="advisory-desc">${esc(stripMd(an.impact || a.description || '').slice(0, 280))}</p>
+  ${an.affected_versions ? `<p class="advisory-meta">Affected: <strong>${esc(an.affected_versions)}</strong>${an.fix_version ? ` → Fixed in: <strong>${esc(an.fix_version)}</strong>` : ''}</p>` : ''}
+  ${action}
+  ${steps ? `<ul class="advisory-steps">${steps}</ul>` : ''}
+  <p class="advisory-date">${formatDate(a.published_at)}</p>
+</a>`;
+  }).join('');
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────
@@ -213,6 +263,19 @@ function renderCveTable(records) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+function stripMd(str) {
+  return String(str ?? '')
+    .replace(/#{1,6}\s+/g, '')        // headings
+    .replace(/\*\*(.+?)\*\*/g, '$1') // bold
+    .replace(/\*(.+?)\*/g, '$1')     // italic
+    .replace(/`{1,3}[^`]*`{1,3}/g, '') // code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+    .replace(/^[-*+]\s+/gm, '')      // bullets
+    .replace(/\n{2,}/g, ' ')         // double newlines → space
+    .replace(/\n/g, ' ')
+    .trim();
+}
+
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
