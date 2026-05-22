@@ -93,6 +93,7 @@ def backfill_releases(
     token: str | None = None,
     min_version: str | None = None,
     stable_only: bool = False,
+    minor_only: bool = False,
 ) -> list[dict[str, object]]:
     all_releases = _all_pages(owner, repo, token)
     if not all_releases:
@@ -117,8 +118,10 @@ def backfill_releases(
         max_major = max(sv.major for _, sv in valid)
         valid = [(r, sv) for r, sv in valid if sv.major >= max_major - 1]
 
-    kept = [r for r, _ in valid]
+    kept = [(r, sv) for r, sv in valid]
     if stable_only:
-        kept = [r for r in kept if not r.get("prerelease")]
-    kept.sort(key=lambda r: str(r["published_at"]))
-    return kept
+        kept = [(r, sv) for r, sv in kept if not r.get("prerelease")]
+    if minor_only:
+        kept = [(r, sv) for r, sv in kept if sv.patch == 0]
+    kept.sort(key=lambda x: str(x[0]["published_at"]))
+    return [r for r, _ in kept]

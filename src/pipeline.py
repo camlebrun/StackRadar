@@ -46,10 +46,12 @@ def _build_record(
     analysis: dict[str, Any] | None,
     analysis_error: str | None,
     cve_details: list[dict[str, Any]],
+    group: str | None = None,
 ) -> dict[str, Any]:
     return {
         "id": release.get("id"),
         "repo": repo,
+        "group": group,
         "tag": release.get("tag_name"),
         "name": release.get("name"),
         "body": release.get("body", ""),
@@ -78,18 +80,23 @@ def run_pipeline(
 
     for repo_cfg in repos:
         repo = repo_cfg["repo"]
+        group = repo_cfg.get("group")
         min_version = repo_cfg.get("min_version")
         stable_only = repo_cfg.get("stable_only", False)
+        minor_only = repo_cfg.get("minor_only", False)
         owner, name = repo.split("/", 1)
         try:
             cursor = get_cursor(s3, bucket, owner, name)
             if cursor is None:
                 releases = backfill_releases(
-                    owner, name, github_token, min_version, bool(stable_only)
+                    owner, name, github_token, min_version, bool(stable_only), bool(minor_only)
                 )
                 logger.info("[%s] backfill %d releases (min=%s)", repo, len(releases), min_version)
             else:
                 releases = get_new_releases(owner, name, cursor, github_token)
+                if minor_only:
+                    from src.semver import parse_semver
+                    releases = [r for r in releases if parse_semver(str(r.get("tag_name", ""))).patch == 0 and parse_semver(str(r.get("tag_name", ""))).minor > 0]
                 logger.info("[%s] incremental: %d new since %s", repo, len(releases), cursor)
 
             new_count = 0
@@ -110,7 +117,7 @@ def run_pipeline(
                     logger.error("❌ Auth error — stopping pipeline: %s", e)
                     raise  # propagate up, stop everything
 
-                record = _build_record(release, repo, analysis, error, [])
+                record = _build_record(release, repo, analysis, error, [], group)
                 put_release(s3, bucket, record)
                 new_count += 1
                 latest_published_at = str(release.get("published_at", ""))
@@ -165,11 +172,22 @@ def run_pipeline(
                 set_advisory_cursor(s3, bucket, owner, name, latest)
         logger.info("[%s] %d advisories stored", repo, len(all_repo_advisories))
 
-    # Read all per-repo advisories and build master digest.json
+    # Read all per-repo advisories and build versioned digest + manifest
     all_advisories = read_all_advisories(s3, bucket)
     all_records = get_digest(s3, bucket, limit=500)
-    write_digest_json(s3, bucket, all_records, all_advisories)
-    logger.info("digest.json: %d releases, %d advisories", len(all_records), len(all_advisories))
+    digest_key = write_digest_json(s3, bucket, all_records, all_advisories)
+    logger.info("%s: %d releases, %d advisories", digest_key, len(all_records), len(all_advisories))
+
+    # Clean up old digest files (keep only current)
+    paginator = s3.get_paginator("list_objects_v2")
+    old_digests = []
+    for page in paginator.paginate(Bucket=bucket, Prefix="digest-"):
+        for obj in page.get("Contents", []):
+            if obj["Key"] != digest_key:
+                old_digests.append({"Key": obj["Key"]})
+    if old_digests:
+        s3.delete_objects(Bucket=bucket, Delete={"Objects": old_digests})
+        logger.info("Cleaned %d old digest(s)", len(old_digests))
 
     logger.info("Pipeline complete: %s", repo_status)
     return run_status

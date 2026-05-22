@@ -1,7 +1,10 @@
 """Run the pipeline locally — loads .env.local for secrets."""
 import logging
 import os
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,10 +37,10 @@ s3 = get_s3_client(
 
 github_token = get_secret(GCP_PROJECT, "GITHUB_TOKEN")
 
-llm_key = get_secret(GCP_PROJECT, "OPENAI_API_KEY")
-llm_provider = "openai"
-llm_delay_s = 0.3  # 500 RPM — quasi pas besoin de délai
-print("🤖 Provider: OpenAI gpt-4o-mini (~$0.06 pour 116 releases)\n")
+llm_key = get_secret(GCP_PROJECT, "MISTRAL_API_KEY")
+llm_provider = "mistral"
+llm_delay_s = 1.2  # free tier ~1 req/s
+print("Provider: Mistral mistral-small-latest (free tier)\n")
 
 print("🚀 Starting pipeline...\n")
 result = run_pipeline(s3, R2_BUCKET, llm_key, github_token, llm_provider, llm_delay_s)

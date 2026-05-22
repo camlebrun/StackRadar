@@ -15,6 +15,7 @@ from src.config import (
     GROQ_MODEL,
     GROQ_TIMEOUT_S,
     LLM_MAX_TOKENS,
+    MISTRAL_MODEL,
     OPENAI_BASE_URL,
     OPENAI_MODEL,
 )
@@ -90,6 +91,20 @@ def _call_openai(prompt: str, api_key: str) -> str:
     return _call_openai_compat(prompt, api_key, OPENAI_BASE_URL, OPENAI_MODEL, 30.0)
 
 
+def _call_mistral(prompt: str, api_key: str) -> str:
+    from mistralai.client import Mistral
+
+    client = Mistral(api_key=api_key)
+    response = client.chat.complete(
+        model=MISTRAL_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        max_tokens=LLM_MAX_TOKENS,
+        response_format={"type": "json_object"},
+    )
+    return response.choices[0].message.content or ""
+
+
 def analyse_release(
     release: dict[str, object],
     api_key: str,
@@ -107,6 +122,8 @@ def analyse_release(
             raw = _call_gemini(prompt, api_key)
         elif provider == "openai":
             raw = _call_openai(prompt, api_key)
+        elif provider == "mistral":
+            raw = _call_mistral(prompt, api_key)
         else:
             raw = _call_groq(prompt, api_key)
 

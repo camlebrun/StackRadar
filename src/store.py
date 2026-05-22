@@ -137,15 +137,28 @@ def write_digest_json(
     bucket: str,
     records: list[dict[str, Any]],
     advisories: list[dict[str, Any]] | None = None,
-) -> None:
-    """Write digest.json = { releases, advisories } to R2 root for public fetch."""
+) -> str:
+    """Write versioned digest + manifest.json. Returns the digest key."""
     slim = [{k: v for k, v in r.items() if k != "body"} for r in records]
     slim.sort(key=lambda r: str(r.get("published_at", "")), reverse=True)
     payload: dict[str, Any] = {"releases": slim, "advisories": advisories or []}
+    body = json.dumps(payload, ensure_ascii=False).encode()
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    digest_key = f"digest-{ts}.json"
+
     s3.put_object(
         Bucket=bucket,
-        Key="digest.json",
-        Body=json.dumps(payload, ensure_ascii=False).encode(),
+        Key=digest_key,
+        Body=body,
         ContentType="application/json",
-        CacheControl="public, max-age=3600",
+        CacheControl="public, max-age=31536000, immutable",
     )
+    s3.put_object(
+        Bucket=bucket,
+        Key="manifest.json",
+        Body=json.dumps({"digest": digest_key, "generated_at": datetime.now(timezone.utc).isoformat()}).encode(),
+        ContentType="application/json",
+        CacheControl="no-cache, must-revalidate",
+    )
+    return digest_key

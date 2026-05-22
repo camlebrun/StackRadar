@@ -1,5 +1,8 @@
 [
-  {"repo": "dbt-labs/dbt-core",       "min_version": "1.10.0", "stable_only": true},
-  {"repo": "starburstdata/dbt-trino",  "min_version": "1.0.0",  "stable_only": true},
-  {"repo": "dagster-io/dagster",       "min_version": "1.13.0", "stable_only": true}
+  {"repo": "dbt-labs/dbt-core",       "group": "dbt-core",     "min_version": "1.10.0", "stable_only": true, "minor_only": true},
+  {"repo": "dbt-labs/dbt-bigquery",   "group": "dbt-adapters", "min_version": "1.0.0",  "stable_only": true, "minor_only": true},
+  {"repo": "starburstdata/dbt-trino", "group": "dbt-adapters", "min_version": "1.0.0",  "stable_only": true, "minor_only": true},
+  {"repo": "duckdb/dbt-duckdb",       "group": "dbt-adapters", "min_version": "1.0.0",  "stable_only": true, "minor_only": true},
+  {"repo": "dagster-io/dagster",       "group": "orchestration","min_version": "1.13.0", "stable_only": true, "minor_only": true},
+  {"repo": "kestra-io/kestra",         "group": "orchestration","min_version": "1.0.0",  "stable_only": true, "minor_only": true}
 ]
