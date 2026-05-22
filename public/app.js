@@ -2,12 +2,14 @@
 'use strict';
 
 // R2 public URL (CORS configured in Cloudflare dashboard)
-const DIGEST_URL = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev/digest.json';
+const R2_BASE = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev';
+const MANIFEST_URL = `${R2_BASE}/manifest.json`;
 
 let allRecords = [];
 let allAdvisories = [];
 let activeSev = 'all';
-let activeRepo = 'all';
+let activeRepo = 'all';   // group filter
+let activeSubRepo = 'all'; // individual repo filter within group
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -121,22 +123,75 @@ function setupSevFilters() {
   });
 }
 
-// ── Repo filters ───────────────────────────────────────────────────────────
+// ── Group + sub-repo filters ───────────────────────────────────────────────
+const GROUP_LABELS = {
+  'dbt-core':     'dbt Core',
+  'dbt-adapters': 'dbt Adapters',
+  'orchestration':'Orchestration',
+};
+
+// repo slug → display name
+const REPO_LABELS = {
+  'dbt-bigquery': 'BigQuery',
+  'dbt-trino':    'Trino',
+  'dbt-duckdb':   'DuckDB',
+  'dbt-core':     'Core',
+  'dagster':      'Dagster',
+  'kestra':       'Kestra',
+};
+
+let _reposByGroup = {};
+
 function buildRepoFilters(records) {
-  const repos = [...new Set(records.map(r => r.repo))].sort();
+  // Build group → repos map
+  _reposByGroup = {};
+  records.forEach(r => {
+    const g = r.group ?? 'other';
+    if (!_reposByGroup[g]) _reposByGroup[g] = new Set();
+    _reposByGroup[g].add(r.repo);
+  });
+
+  const groups = Object.keys(_reposByGroup).sort();
   const container = document.getElementById('repo-filters-inline');
+  const subContainer = document.getElementById('repo-filters-sub');
 
-  const repoButtons = repos.map(r =>
-    `<button class="chip" data-repo="${esc(r)}">${esc(r.split('/')[1])}</button>`
+  const groupButtons = groups.map(g =>
+    `<button class="chip" data-group="${esc(g)}">${esc(GROUP_LABELS[g] ?? g)}</button>`
   ).join('');
-
-  container.innerHTML = `<button class="chip active" data-repo="all">All repos</button>${repoButtons}`;
+  container.innerHTML = `<button class="chip active" data-group="all">All</button>${groupButtons}`;
 
   container.querySelectorAll('.chip').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      activeRepo = btn.dataset.repo;
+      activeRepo = btn.dataset.group;
+      activeSubRepo = 'all';
+      buildSubFilters(activeRepo, subContainer);
+      applyFilters();
+    });
+  });
+}
+
+function buildSubFilters(group, subContainer) {
+  const repos = _reposByGroup[group];
+  if (!repos || repos.size <= 1 || group === 'all') {
+    subContainer.classList.add('hidden');
+    subContainer.innerHTML = '';
+    return;
+  }
+  const repoButtons = [...repos].sort().map(r => {
+    const slug = r.split('/')[1];
+    const label = REPO_LABELS[slug] ?? slug;
+    return `<button class="chip" data-subrepo="${esc(r)}">${esc(label)}</button>`;
+  }).join('');
+  subContainer.innerHTML = `<button class="chip active" data-subrepo="all">All</button>${repoButtons}`;
+  subContainer.classList.remove('hidden');
+
+  subContainer.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      subContainer.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeSubRepo = btn.dataset.subrepo;
       applyFilters();
     });
   });
@@ -150,12 +205,13 @@ function applyFilters() {
   let visibleCards = 0;
   cards.forEach(c => {
     const sevOk = activeSev === 'all' || c.dataset.severity === activeSev;
-    const repoOk = activeRepo === 'all' || c.dataset.repo === activeRepo;
+    const groupOk = activeRepo === 'all' || c.dataset.group === activeRepo;
+    const subOk = activeSubRepo === 'all' || c.dataset.repo === activeSubRepo;
     const searchOk = !q ||
       c.dataset.repo.toLowerCase().includes(q) ||
       c.dataset.tags.toLowerCase().includes(q) ||
       c.textContent.toLowerCase().includes(q);
-    const show = sevOk && repoOk && searchOk;
+    const show = sevOk && groupOk && subOk && searchOk;
     c.classList.toggle('hidden', !show);
     if (show) visibleCards++;
   });
@@ -164,7 +220,9 @@ function applyFilters() {
   let visibleAdvisories = 0;
   advisories.forEach(a => {
     const sevOk = activeSev === 'all' || a.dataset.severity === activeSev;
-    const repoOk = activeRepo === 'all' || a.dataset.repo === activeRepo;
+    const groupOk = activeRepo === 'all' || a.dataset.group === activeRepo;
+    const subOk = activeSubRepo === 'all' || a.dataset.repo === activeSubRepo;
+    const repoOk = groupOk && subOk;
     const searchOk = !q || a.textContent.toLowerCase().includes(q);
     const show = sevOk && repoOk && searchOk;
     a.classList.toggle('hidden', !show);
@@ -179,7 +237,10 @@ function applyFilters() {
 async function loadDigest() {
   const loading = document.getElementById('loading');
   try {
-    const resp = await fetch(DIGEST_URL);
+    const manifest = await fetch(MANIFEST_URL, { cache: 'no-store' });
+    if (!manifest.ok) throw new Error(`manifest HTTP ${manifest.status}`);
+    const { digest } = await manifest.json();
+    const resp = await fetch(`${R2_BASE}/${digest}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     allRecords = Array.isArray(data) ? data : (data.releases ?? []);
@@ -219,6 +280,7 @@ function renderGrid(records) {
 
     return `<article class="card" data-idx="${idx}"
   data-repo="${esc(r.repo)}"
+  data-group="${esc(r.group ?? '')}"
   data-tags="${esc(tags.join(' '))}"
   data-severity="${esc(severity)}">
   <div class="card-header">
@@ -272,6 +334,7 @@ function renderAdvisories(advisories) {
    target="_blank"
    rel="noopener"
    data-repo="${esc(a.repo ?? '')}"
+   data-group="${esc(a.group ?? '')}"
    data-severity="${esc(sev)}">
   <div class="advisory-header">
     <div class="advisory-ids">

@@ -154,6 +154,13 @@ header h1 {
   align-items: center;
 }
 
+#repo-filters-sub {
+  flex-basis: 100%;
+  padding-left: 2px;
+  border-left: 2px solid #e4e4e7;
+  margin-left: 2px;
+}
+
 .chip {
   padding: 4px 10px;
   border-radius: 5px;
