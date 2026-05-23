@@ -1,7 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from src.analyser import analyse_release
+from src.analyser import analyse_release, call_llm
 
 _VALID_ANALYSIS = {
     "summary": "This release fixes several bugs.",
@@ -61,3 +61,11 @@ def test_exception_returns_none() -> None:
         analysis, error = analyse_release(_make_release(), "fake-key")
     assert analysis is None
     assert "timeout" in (error or "")
+
+
+def test_call_llm_returns_string() -> None:
+    client = MagicMock()
+    client.chat.complete.return_value.choices[0].message.content = '{"ok": true}'
+    with patch("src.analyser.Mistral", return_value=client):
+        result = call_llm("some prompt", "fake-key")
+    assert result == '{"ok": true}'
