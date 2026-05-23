@@ -14,7 +14,9 @@ def _mock_response(ok: bool, data: object, status_code: int = 200) -> MagicMock:
     return resp
 
 
-def _make_advisory(severity: str = "high", ghsa_id: str = "GHSA-0000-0000-0000") -> dict[str, object]:
+def _make_advisory(
+    severity: str = "high", ghsa_id: str = "GHSA-0000-0000-0000"
+) -> dict[str, object]:
     return {
         "ghsa_id": ghsa_id,
         "cve_id": "CVE-2026-12345",
@@ -70,14 +72,16 @@ def test_fetch_network_error_returns_empty() -> None:
 
 
 def test_fetch_adds_auth_header_when_token_provided() -> None:
-    with patch("src.security_advisories.requests.get", return_value=_mock_response(True, [])) as mock_get:
+    mock_resp = _mock_response(True, [])
+    with patch("src.security_advisories.requests.get", return_value=mock_resp) as mock_get:
         fetch_advisories("owner", "repo", token="ghp_test")
     headers = mock_get.call_args.kwargs["headers"]
     assert headers.get("Authorization") == "Bearer ghp_test"
 
 
 def test_fetch_no_auth_header_without_token() -> None:
-    with patch("src.security_advisories.requests.get", return_value=_mock_response(True, [])) as mock_get:
+    mock_resp = _mock_response(True, [])
+    with patch("src.security_advisories.requests.get", return_value=mock_resp) as mock_get:
         fetch_advisories("owner", "repo")
     headers = mock_get.call_args.kwargs["headers"]
     assert "Authorization" not in headers

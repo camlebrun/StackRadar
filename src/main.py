@@ -30,7 +30,9 @@ def main() -> None:
     try:
         github_token: str | None = get_secret(GCP_PROJECT, "GITHUB_TOKEN")
     except Exception:
-        logger.warning("GITHUB_TOKEN not in Secret Manager — unauthenticated GitHub requests (60 req/hr limit)")
+        logger.warning(
+            "GITHUB_TOKEN not in Secret Manager — unauthenticated GitHub requests (60 req/hr limit)"
+        )
         github_token = None
 
     try:

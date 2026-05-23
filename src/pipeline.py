@@ -292,7 +292,9 @@ def run_pipeline(
     repo_status = _process_repos(
         s3, bucket, repos, llm_key, github_token, llm_delay_s, email_function_url, use_heuristics
     )
-    set_run_status(s3, bucket, {"ran_at": datetime.now(timezone.utc).isoformat(), "repos": repo_status})
+    set_run_status(
+        s3, bucket, {"ran_at": datetime.now(timezone.utc).isoformat(), "repos": repo_status}
+    )
 
     _process_advisories(s3, bucket, repos, llm_key, github_token)
 

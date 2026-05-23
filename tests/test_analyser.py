@@ -27,7 +27,8 @@ def _mock_mistral_client(content: str) -> MagicMock:
 
 
 def test_happy_path() -> None:
-    with patch("src.analyser.Mistral", return_value=_mock_mistral_client(json.dumps(_VALID_ANALYSIS))):
+    mock_client = _mock_mistral_client(json.dumps(_VALID_ANALYSIS))
+    with patch("src.analyser.Mistral", return_value=mock_client):
         analysis, error = analyse_release(_make_release(), "fake-key")
     assert error is None
     assert analysis is not None
