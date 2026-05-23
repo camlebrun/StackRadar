@@ -28,11 +28,10 @@ _SEV_FG = {
 }
 
 
-
 def _safe_text(s: str) -> str:
     """Normalize common non-ASCII lookalikes from LLM output to plain UTF-8."""
     return (
-        s.replace("\xa0", " ")   # non-breaking space → regular space
+        s.replace("\xa0", " ")  # non-breaking space → regular space
         .replace("\u2019", "'")
         .replace("\u2018", "'")
         .replace("\u201c", '"')
@@ -55,8 +54,7 @@ def _render_card(r: dict[str, Any]) -> str:
             "font-size:13px;line-height:1.5;"
         )
         bullet_style = (
-            "color:#8b5cf6;-webkit-text-fill-color:#8b5cf6;"
-            "font-weight:700;margin-right:8px;"
+            "color:#8b5cf6;-webkit-text-fill-color:#8b5cf6;" "font-weight:700;margin-right:8px;"
         )
         items = "".join(
             f'<li style="{li_style}">'
