@@ -5,6 +5,7 @@ import logging
 import time
 
 import requests
+from mistralai.client import Mistral
 from pydantic import BaseModel, ValidationError
 
 from src.config import (
@@ -91,8 +92,6 @@ def _call_openai(prompt: str, api_key: str) -> str:
 
 
 def _call_mistral(prompt: str, api_key: str) -> str:
-    from mistralai.client import Mistral
-
     client = Mistral(api_key=api_key)
     response = client.chat.complete(
         model=MISTRAL_MODEL,
