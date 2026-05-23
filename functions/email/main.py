@@ -47,6 +47,18 @@ def _get_secret(name: str) -> str:
         _secrets[name] = client.access_secret_version(name=path).payload.data.decode()
     return _secrets[name]
 
+def _safe_text(s: str) -> str:
+    """Normalize common non-ASCII lookalikes from LLM output to plain UTF-8."""
+    return (
+        s.replace("\xa0", " ")   # non-breaking space → regular space
+        .replace("\u2019", "'")
+        .replace("\u2018", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+    )
+
 
 def _render_card(r: dict[str, Any]) -> str:
     a = r.get("analysis") or {}
@@ -56,9 +68,11 @@ def _render_card(r: dict[str, Any]) -> str:
     changes_block = ""
     if changes:
         items = "".join(
-            f'<li style="margin:4px 0;color:#6b7280;font-size:13px;">{c}</li>' for c in changes
+            f'<li style="margin:6px 0;color:#6b7280;-webkit-text-fill-color:#6b7280;font-size:13px;line-height:1.5;">'
+            f'<span style="color:#8b5cf6;-webkit-text-fill-color:#8b5cf6;font-weight:700;margin-right:8px;">&rsaquo;</span>'
+            f'{_safe_text(str(c))}</li>' for c in changes
         )
-        changes_block = f'<ul style="margin:0;padding-left:16px;">{items}</ul>'
+        changes_block = f'<ul style="margin:0;padding:0;list-style:none;">{items}</ul>'
 
     tpl = (_TEMPLATES / "email_card.html").read_text()
     return (
@@ -68,7 +82,7 @@ def _render_card(r: dict[str, Any]) -> str:
         .replace("{{repo_owner}}", repo.split("/")[0])
         .replace("{{repo_name}}", repo.split("/")[-1])
         .replace("{{tag}}", str(r.get("tag", "")))
-        .replace("{{summary}}", a.get("summary", "No summary available."))
+        .replace("{{summary}}", _safe_text(a.get("summary", "No summary available.")))
         .replace("{{changes_block}}", changes_block)
         .replace("{{url}}", str(r.get("html_url", "#")))
     )
@@ -93,15 +107,13 @@ def _fail_html(error: str, repo: str | None) -> str:
         else ""
     )
     return (
-        '<!DOCTYPE html><html><body style="margin:0;padding:0;'
-        "background:linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%);"
+        '<!DOCTYPE html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head><body style="margin:0;padding:0;'
+        "background-color:#f5f3ff;"
         'font-family:-apple-system,sans-serif;">'
         '<div style="max-width:600px;margin:0 auto;padding:32px 16px;">'
         '<div style="margin-bottom:20px;">'
-        '<span style="font-size:16px;font-weight:700;'
-        "background:linear-gradient(135deg,#5b5fc7,#8b5cf6);"
-        '-webkit-background-clip:text;-webkit-text-fill-color:transparent;">'
-        "⬡ StackRadar</span></div>"
+        '<span style="font-size:16px;font-weight:700;color:#5b5fc7;display:flex;align-items:center;gap:8px;">'
+        "📡 StackRadar</span></div>"
         '<div style="background:white;border-radius:20px;border:1px solid #fee2e2;'
         'border-left:3px solid #dc2626;padding:20px 24px;">'
         '<h2 style="margin:0 0 12px;color:#dc2626;font-size:16px;font-weight:700;">'
@@ -128,7 +140,7 @@ def _send(subject: str, html: str) -> None:
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(gmail_address, gmail_app_password)
-        server.send_message(msg)
+        server.sendmail(gmail_address, notify_email, msg.as_bytes())
 
 
 @functions_framework.http
