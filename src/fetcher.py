@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import logging
 import re
 import time
@@ -287,9 +286,18 @@ def backfill_releases(
 _CHANGELOG_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+-preview\.\d+)$")
 _CHANGELOG_DATE_RE = re.compile(r"Released\s+(\w+ \d+, \d{4})")
 _MONTH_ABBR = {
-    "January": 1, "February": 2, "March": 3, "April": 4,
-    "May": 5, "June": 6, "July": 7, "August": 8,
-    "September": 9, "October": 10, "November": 11, "December": 12,
+    "January": 1,
+    "February": 2,
+    "March": 3,
+    "April": 4,
+    "May": 5,
+    "June": 6,
+    "July": 7,
+    "August": 8,
+    "September": 9,
+    "October": 10,
+    "November": 11,
+    "December": 12,
 }
 
 
@@ -305,7 +313,8 @@ def _parse_changelog_date(text: str) -> str | None:
 
 
 def _changelog_anchor(version: str) -> str:
-    return "https://github.com/dbt-labs/dbt-fusion/blob/main/CHANGELOG.md#" + version.replace(".", "")
+    anchor = version.replace(".", "")
+    return f"https://github.com/dbt-labs/dbt-fusion/blob/main/CHANGELOG.md#{anchor}"
 
 
 def fetch_changelog_releases(
@@ -353,17 +362,19 @@ def fetch_changelog_releases(
             if pub_dt <= since_dt:
                 continue
 
-        releases.append({
-            "tag_name": header,
-            "name": header,
-            "body": body,
-            "published_at": published_at,
-            "html_url": _changelog_anchor(header),
-            "prerelease": True,
-            "draft": False,
-            "id": None,
-            "author": None,
-        })
+        releases.append(
+            {
+                "tag_name": header,
+                "name": header,
+                "body": body,
+                "published_at": published_at,
+                "html_url": _changelog_anchor(header),
+                "prerelease": True,
+                "draft": False,
+                "id": None,
+                "author": None,
+            }
+        )
 
     releases.sort(key=lambda r: str(r["published_at"]))
     return releases
