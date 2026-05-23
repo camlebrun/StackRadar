@@ -25,6 +25,23 @@ jobs:
         continue-on-error: true
       - run: pytest --tb=short -q --cov=src --cov-report=term-missing --cov-fail-under=65
 
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t stackradar:ci .
+
+  email-function:
+    name: Email function deps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r functions/email/requirements.txt
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
