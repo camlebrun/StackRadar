@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
@@ -277,3 +277,147 @@ def backfill_releases(
         valid = [(r, sv) for r, sv in valid if sv.patch == 0]
     valid.sort(key=lambda x: str(x[0]["published_at"]))
     return [r for r, _ in valid]
+
+
+# ---------------------------------------------------------------------------
+# Changelog-based fetcher (for repos with no GitHub releases, e.g. dbt-fusion)
+# ---------------------------------------------------------------------------
+
+_CHANGELOG_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+-preview\.\d+)$")
+_CHANGELOG_DATE_RE = re.compile(r"Released\s+(\w+ \d+, \d{4})")
+_HISTORICAL_CUTOFF = "2026-01-01T00:00:00+00:00"
+_HISTORICAL_TAG = "2.0.0-pre-2026"
+HISTORICAL_TAG = _HISTORICAL_TAG
+
+
+def _parse_changelog_date(text: str) -> str | None:
+    m = _CHANGELOG_DATE_RE.search(text)
+    if not m:
+        return None
+    try:
+        dt = datetime.strptime(m.group(1), "%B %d, %Y").replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    except ValueError:
+        return None
+
+
+def _changelog_anchor(version: str) -> str:
+    anchor = version.replace(".", "")
+    return f"https://github.com/dbt-labs/dbt-fusion/blob/main/CHANGELOG.md#{anchor}"
+
+
+def _build_historical_record(
+    pre_releases: list[dict[str, object]],
+    owner: str,
+    repo: str,
+) -> dict[str, object]:
+    """Merge all pre-2026 releases into one consolidated synthetic record."""
+    pre_releases_sorted = sorted(pre_releases, key=lambda r: str(r["published_at"]))
+    first = str(pre_releases_sorted[0]["tag_name"])
+    last = str(pre_releases_sorted[-1]["tag_name"])
+    published_at = str(pre_releases_sorted[-1]["published_at"])
+
+    version_list = "\n".join(
+        f"- {r['tag_name']} ({str(r['published_at'])[:10]})" for r in pre_releases_sorted
+    )
+
+    # Sample: first 2 + last 2 versions for LLM context
+    sample_releases = pre_releases_sorted[:2] + pre_releases_sorted[-2:]
+    body_sample = "\n\n---\n\n".join(
+        f"### {r['tag_name']}\n{str(r['body'])[:600]}" for r in sample_releases
+    )
+
+    return {
+        "tag_name": _HISTORICAL_TAG,
+        "name": f"dbt-fusion — Historical snapshot ({first} → {last})",
+        "body": body_sample,
+        "published_at": published_at,
+        "html_url": f"https://github.com/{owner}/{repo}/blob/main/CHANGELOG.md",
+        "prerelease": True,
+        "draft": False,
+        "id": None,
+        "author": None,
+        "_historical_meta": {
+            "version_count": len(pre_releases),
+            "first_version": first,
+            "last_version": last,
+            "version_list": version_list,
+        },
+    }
+
+
+def fetch_changelog_releases(
+    owner: str,
+    repo: str,
+    token: str | None = None,
+    since: str | None = None,
+) -> list[dict[str, object]]:
+    """Parse CHANGELOG.md and return release-like records.
+
+    Pre-2026 versions are merged into a single historical entry.
+    2026+ versions matching X.Y.Z-preview.N are returned individually.
+    Patch versions (Z > 0), nightly, and beta entries are excluded.
+    """
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/CHANGELOG.md"
+    headers = {**_headers_base(token), "Accept": "application/vnd.github.raw+json"}
+    resp = requests.get(url, headers=headers, timeout=GITHUB_TIMEOUT_S)
+    if not resp.ok:
+        raise GitHubFetchError(resp.status_code, resp.text[:200])
+
+    raw = resp.text
+    since_dt = datetime.fromisoformat(since.replace("Z", "+00:00")) if since else None
+    cutoff_dt = datetime.fromisoformat(_HISTORICAL_CUTOFF)
+
+    sections = re.split(r"^## ", raw, flags=re.MULTILINE)
+    pre_releases: list[dict[str, object]] = []
+    releases: list[dict[str, object]] = []
+
+    for section in sections:
+        lines = section.strip().splitlines()
+        if not lines:
+            continue
+        header = lines[0].strip()
+        if not _CHANGELOG_VERSION_RE.match(header):
+            continue
+
+        sv = parse_semver(header)
+        if sv.valid and sv.patch > 0:
+            continue
+
+        body = "\n".join(lines[1:]).strip()
+        published_at = _parse_changelog_date(body)
+        if published_at is None:
+            continue
+
+        pub_dt = datetime.fromisoformat(published_at)
+
+        if pub_dt < cutoff_dt:
+            pre_releases.append({"tag_name": header, "body": body, "published_at": published_at})
+            continue
+
+        if since_dt and pub_dt <= since_dt:
+            continue
+
+        releases.append(
+            {
+                "tag_name": header,
+                "name": header,
+                "body": body,
+                "published_at": published_at,
+                "html_url": _changelog_anchor(header),
+                "prerelease": True,
+                "draft": False,
+                "id": None,
+                "author": None,
+            }
+        )
+
+    result: list[dict[str, object]] = []
+
+    # Include historical entry only on first backfill (no cursor yet)
+    historical_already_stored = since_dt is not None
+    if pre_releases and not historical_already_stored:
+        result.append(_build_historical_record(pre_releases, owner, repo))
+
+    result.extend(sorted(releases, key=lambda r: str(r["published_at"])))
+    return result
