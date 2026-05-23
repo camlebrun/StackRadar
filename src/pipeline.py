@@ -195,8 +195,14 @@ def run_pipeline(
                     continue
 
                 record = _build_record(
-                    release, repo, analysis, error, [], group,
-                    is_deprecated, deprecated_notice,
+                    release,
+                    repo,
+                    analysis,
+                    error,
+                    [],
+                    group,
+                    is_deprecated,
+                    deprecated_notice,
                 )
                 put_release(s3, bucket, record)
                 new_count += 1

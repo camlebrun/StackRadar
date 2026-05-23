@@ -134,7 +134,7 @@ def heuristic_dbt_analysis(
     for para in readme.split("\n\n"):
         clean = para.strip().lstrip("#").strip()
         clean = re.sub(r"<[^>]+>", "", clean).strip()  # strip HTML tags
-        clean = re.sub(r"\s+", " ", clean)             # collapse whitespace
+        clean = re.sub(r"\s+", " ", clean)  # collapse whitespace
         if len(clean) > 40 and not clean.startswith("!"):
             purpose = clean[:300]
             break
