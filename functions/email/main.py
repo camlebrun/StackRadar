@@ -47,10 +47,11 @@ def _get_secret(name: str) -> str:
         _secrets[name] = client.access_secret_version(name=path).payload.data.decode()
     return _secrets[name]
 
+
 def _safe_text(s: str) -> str:
     """Normalize common non-ASCII lookalikes from LLM output to plain UTF-8."""
     return (
-        s.replace("\xa0", " ")   # non-breaking space → regular space
+        s.replace("\xa0", " ")  # non-breaking space → regular space
         .replace("\u2019", "'")
         .replace("\u2018", "'")
         .replace("\u201c", '"')
@@ -70,7 +71,8 @@ def _render_card(r: dict[str, Any]) -> str:
         items = "".join(
             f'<li style="margin:6px 0;color:#6b7280;-webkit-text-fill-color:#6b7280;font-size:13px;line-height:1.5;">'
             f'<span style="color:#8b5cf6;-webkit-text-fill-color:#8b5cf6;font-weight:700;margin-right:8px;">&rsaquo;</span>'
-            f'{_safe_text(str(c))}</li>' for c in changes
+            f"{_safe_text(str(c))}</li>"
+            for c in changes
         )
         changes_block = f'<ul style="margin:0;padding:0;list-style:none;">{items}</ul>'
 
