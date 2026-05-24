@@ -15,3 +15,4 @@ public/digest.json
 cloudbuild-trigger.yaml
 new_front/
 scripts/
+.claude/worktrees/
