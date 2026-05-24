@@ -343,17 +343,19 @@ def fetch_gcp_docs_releases(
         tag = dt.strftime("%Y-%m-%d")
         anchor = dt.strftime("%B-%d-%Y").lower()
 
-        releases.append({
-            "tag_name": tag,
-            "name": f"{display_name} — {header}",
-            "body": body,
-            "published_at": dt.isoformat(),
-            "html_url": f"{docs_base_url}#{anchor}",
-            "prerelease": False,
-            "draft": False,
-            "id": None,
-            "author": None,
-        })
+        releases.append(
+            {
+                "tag_name": tag,
+                "name": f"{display_name} — {header}",
+                "body": body,
+                "published_at": dt.isoformat(),
+                "html_url": f"{docs_base_url}#{anchor}",
+                "prerelease": False,
+                "draft": False,
+                "id": None,
+                "author": None,
+            }
+        )
 
     return sorted(releases, key=lambda r: str(r["published_at"]))
 
