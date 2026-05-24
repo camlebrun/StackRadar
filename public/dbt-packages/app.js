@@ -58,7 +58,15 @@ async function loadPackages() {
 
 function setCrossTabCounts(releases, advisories) {
   const el = id => document.getElementById(id);
-  const nonPkg = releases.filter(r => r.group !== 'dbt-packages' && r.group !== 'dbt-fusion' && r.repo !== 'dbt-labs/dbt-fusion');
+  const nonPkg = releases.filter(r =>
+    r.group !== 'dbt-packages' &&
+    r.group !== 'dbt-fusion' &&
+    r.repo !== 'dbt-labs/dbt-fusion' &&
+    r.group !== 'bigquery' &&
+    r.repo !== 'google/bigquery' &&
+    r.group !== 'lakehouse' &&
+    r.repo !== 'google/lakehouse'
+  );
   if (el('release-count'))  el('release-count').textContent  = nonPkg.length || '';
   if (el('advisory-count')) el('advisory-count').textContent = advisories.length || '';
   const fusionRecs   = releases.filter(r => r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion');
@@ -68,6 +76,16 @@ function setCrossTabCounts(releases, advisories) {
   if (el('fusion-count')) {
     el('fusion-count').textContent = fusionLatest.length || '';
     el('fusion-count').title = `${fusionLatest.length} latest release · ${fusionRecs.length} total in history`;
+  }
+  const bqRecs = releases.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
+  if (el('bq-count')) {
+    el('bq-count').textContent = bqRecs.length || '';
+    el('bq-count').title = `${bqRecs.length} release windows tracked`;
+  }
+  const lhRecs = releases.filter(r => r.group === 'lakehouse' || r.repo === 'google/lakehouse');
+  if (el('lh-count')) {
+    el('lh-count').textContent = lhRecs.length || '';
+    el('lh-count').title = `${lhRecs.length} release windows tracked`;
   }
 }
 

@@ -7,6 +7,8 @@ from mistralai.client import Mistral
 from pydantic import BaseModel, ValidationError
 
 from src.config import LLM_MAX_TOKENS, MISTRAL_MODEL
+from src.prompts.bigquery_release_analysis import BIGQUERY_RELEASE_ANALYSIS_PROMPT
+from src.prompts.lakehouse_release_analysis import LAKEHOUSE_RELEASE_ANALYSIS_PROMPT
 from src.prompts.dbt_package_analysis import DBT_PACKAGE_ANALYSIS_PROMPT
 from src.prompts.fusion_historical import FUSION_HISTORICAL_PROMPT
 from src.prompts.fusion_release_analysis import FUSION_RELEASE_ANALYSIS_PROMPT
@@ -22,6 +24,30 @@ class DbtPackageAnalysisResult(BaseModel):
     is_prod_breaking_bug: bool
     severity: str
     tags: list[str]
+
+
+def _coerce_str_list(v: object) -> list[str]:
+    if not isinstance(v, list):
+        return []
+    return [item if isinstance(item, str) else str(item) for item in v]
+
+
+class BigQueryAnalysisResult(BaseModel):
+    summary: str
+    key_changes: list[str]
+    breaking_changes: list[str] = []
+    migration_notes: str = ""
+    cost_and_performance_impact: str = ""
+    severity: str
+    tags: list[str]
+
+    @classmethod
+    def model_validate(cls, obj: object, **kwargs: object) -> "BigQueryAnalysisResult":
+        if isinstance(obj, dict):
+            for field in ("key_changes", "breaking_changes", "tags"):
+                if field in obj:
+                    obj[field] = _coerce_str_list(obj[field])  # type: ignore[index]
+        return super().model_validate(obj, **kwargs)
 
 
 class AnalysisResult(BaseModel):
@@ -156,6 +182,50 @@ def analyse_fusion_release(
         return None, str(e)
     except Exception as e:
         logger.error("Fusion LLM call failed for %s@%s: %s", repo, tag, e)
+        return None, str(e)
+
+
+def analyse_lakehouse_release(
+    release: dict[str, object],
+    api_key: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Analyse a Google Cloud Lakehouse date-window release."""
+    tag = str(release.get("tag_name", ""))
+    name = str(release.get("name", tag))
+    body = str(release.get("body", ""))[:5000]
+
+    prompt = LAKEHOUSE_RELEASE_ANALYSIS_PROMPT.format(tag=tag, name=name, body=body)
+    try:
+        data = json.loads(_call_mistral(prompt, api_key))
+        result = BigQueryAnalysisResult.model_validate(data)
+        return result.model_dump(), None
+    except ValidationError as e:
+        logger.error("Lakehouse LLM validation failed for %s: %s", tag, e)
+        return None, str(e)
+    except Exception as e:
+        logger.error("Lakehouse LLM call failed for %s: %s", tag, e)
+        return None, str(e)
+
+
+def analyse_bigquery_release(
+    release: dict[str, object],
+    api_key: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Analyse a BigQuery date-window release from Google Cloud Docs."""
+    tag = str(release.get("tag_name", ""))
+    name = str(release.get("name", tag))
+    body = str(release.get("body", ""))[:5000]
+
+    prompt = BIGQUERY_RELEASE_ANALYSIS_PROMPT.format(tag=tag, name=name, body=body)
+    try:
+        data = json.loads(_call_mistral(prompt, api_key))
+        result = BigQueryAnalysisResult.model_validate(data)
+        return result.model_dump(), None
+    except ValidationError as e:
+        logger.error("BigQuery LLM validation failed for %s: %s", tag, e)
+        return None, str(e)
+    except Exception as e:
+        logger.error("BigQuery LLM call failed for %s: %s", tag, e)
         return None, str(e)
 
 

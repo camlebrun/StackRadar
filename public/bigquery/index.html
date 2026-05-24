@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dbt Fusion · StackRadar</title>
+  <title>BigQuery · StackRadar</title>
   <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="stylesheet" href="/style.css" />
 </head>
@@ -20,8 +20,8 @@
         <a class="tab" href="/">Release Notes <span class="badge" id="release-count"></span></a>
         <a class="tab" href="/security/">Security <span class="badge badge-cve" id="advisory-count"></span></a>
         <a class="tab" href="/dbt-packages/">dbt Packages <span class="badge" id="pkg-count"></span></a>
-        <a class="tab active" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
-        <a class="tab" href="/bigquery/">BigQuery <span class="badge" id="bq-count"></span></a>
+        <a class="tab" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
+        <a class="tab active" href="/bigquery/">BigQuery <span class="badge" id="bq-count"></span></a>
         <a class="tab" href="/lakehouse/">Lakehouse <span class="badge" id="lh-count"></span></a>
       </div>
 
@@ -31,9 +31,12 @@
         <option value="all">All tags</option>
       </select>
 
-      <select id="latest-select" class="tag-select">
-        <option value="latest">Latest only</option>
-        <option value="all">All versions</option>
+      <select id="sev-select" class="tag-select">
+        <option value="all">All severities</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
       </select>
     </div>
   </header>
@@ -45,16 +48,16 @@
         <path d="M8 7v5M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>
-        <strong>dbt Fusion</strong> is dbt's new Rust-based engine — tracked separately because it uses a distinct versioning scheme and release channel (preview builds via <em>CHANGELOG.md</em>, not GitHub releases).
-        Minor releases only · patches excluded unless prod-breaking.
+        <strong>Google Cloud BigQuery</strong> release notes — tracked as rolling date windows from <a href="https://cloud.google.com/bigquery/docs/release-notes" target="_blank" rel="noopener">cloud.google.com/bigquery/docs/release-notes</a>, since 2026.
+        Each entry covers all announcements for a given date: GA promotions, new features, breaking changes, and data transfer updates.
       </span>
     </div>
     <div class="ai-disclaimer">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm.75 10.5h-1.5v-1.5h1.5v1.5Zm0-3h-1.5V4.5h1.5V8.5Z" fill="currentColor"/></svg>
       Summaries are AI-generated and have not been reviewed by a human.
     </div>
-    <div id="fusion-grid" class="bento-grid"></div>
-    <p id="empty-fusion" class="empty-state hidden">No releases match your filter.</p>
+    <div id="bq-grid" class="bento-grid"></div>
+    <p id="empty-bq" class="empty-state hidden">No releases match your filter.</p>
     <p id="loading" class="loading">Loading releases…</p>
   </main>
 
@@ -76,20 +79,24 @@
         <h3 class="drawer-section-title">Key changes</h3>
         <ul id="drawer-changes" class="card-changes drawer-changes"></ul>
       </div>
+      <div id="drawer-breaking-wrap" class="drawer-section hidden">
+        <h3 class="drawer-section-title">Breaking changes</h3>
+        <ul id="drawer-breaking" class="card-changes drawer-changes"></ul>
+      </div>
+      <div id="drawer-cost-wrap" class="drawer-section hidden">
+        <h3 class="drawer-section-title">Cost &amp; Performance</h3>
+        <p id="drawer-cost" class="drawer-summary"></p>
+      </div>
       <div id="drawer-tags-wrap" class="drawer-section hidden">
         <div id="drawer-tags" class="tags"></div>
       </div>
-      <div id="drawer-cve-wrap" class="drawer-section hidden">
-        <h3 class="drawer-section-title">CVE references</h3>
-        <div id="drawer-cves" class="drawer-cves"></div>
-      </div>
       <a id="drawer-link" class="drawer-link" target="_blank" rel="noopener">
-        View changelog →
+        View release notes →
       </a>
     </div>
   </aside>
 
-  <script type="module" src="/dbt-fusion/app.js"></script>
+  <script type="module" src="/bigquery/app.js"></script>
   <footer class="site-footer">Made by <a href="https://camillelebrun.fr" target="_blank" rel="noopener">Camille Lebrun</a></footer>
 </body>
 </html>

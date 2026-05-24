@@ -194,11 +194,21 @@ async function loadDigest() {
     allRecords = Array.isArray(data) ? data : (data.releases ?? []);
     allAdvisories = Array.isArray(data) ? [] : (data.advisories ?? []);
     loading.classList.add('hidden');
-    const nonPkg = allRecords.filter(r => r.group !== 'dbt-packages' && r.group !== 'dbt-fusion' && r.repo !== 'dbt-labs/dbt-fusion');
+    const nonPkg = allRecords.filter(r =>
+      r.group !== 'dbt-packages' &&
+      r.group !== 'dbt-fusion' &&
+      r.repo !== 'dbt-labs/dbt-fusion' &&
+      r.group !== 'bigquery' &&
+      r.repo !== 'google/bigquery' &&
+      r.group !== 'lakehouse' &&
+      r.repo !== 'google/lakehouse'
+    );
     const pkgRecs    = allRecords.filter(r => r.group === 'dbt-packages');
     const fusionRecs = allRecords.filter(r => r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion');
+    const bqRecs     = allRecords.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
+    const lhRecs     = allRecords.filter(r => r.group === 'lakehouse' || r.repo === 'google/lakehouse');
     renderGrid(nonPkg);
-    updateCounts(nonPkg, allAdvisories, pkgRecs, fusionRecs);
+    updateCounts(nonPkg, allAdvisories, pkgRecs, fusionRecs, bqRecs, lhRecs);
     buildTagFilter(nonPkg);
     buildRepoFilters(nonPkg);
   } catch (err) {
@@ -207,7 +217,7 @@ async function loadDigest() {
   }
 }
 
-function updateCounts(records, advisories, pkgRecs, fusionRecs) {
+function updateCounts(records, advisories, pkgRecs, fusionRecs, bqRecs = [], lhRecs = []) {
   document.getElementById('digest-count').textContent = records.length || '';
   document.getElementById('advisory-count').textContent = advisories.length || '';
   const pkgBadge = document.getElementById('pkg-count');
@@ -223,6 +233,16 @@ function updateCounts(records, advisories, pkgRecs, fusionRecs) {
       : [];
     fusionBadge.textContent = fusionLatest.length || '';
     fusionBadge.title = `${fusionLatest.length} latest release · ${fusionRecs.length} total in history`;
+  }
+  const bqBadge = document.getElementById('bq-count');
+  if (bqBadge) {
+    bqBadge.textContent = bqRecs.length || '';
+    bqBadge.title = `${bqRecs.length} release windows tracked`;
+  }
+  const lhBadge = document.getElementById('lh-count');
+  if (lhBadge) {
+    lhBadge.textContent = lhRecs.length || '';
+    lhBadge.title = `${lhRecs.length} release windows tracked`;
   }
 }
 

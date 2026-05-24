@@ -795,6 +795,27 @@ main {
   color: var(--accent);
 }
 
+.ai-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #5b5fc7;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-left: 3px solid #8b5cf6;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.ai-disclaimer svg {
+  flex-shrink: 0;
+  color: #8b5cf6;
+}
+
 .back-link {
   font-size: 13px;
   font-weight: 500;
