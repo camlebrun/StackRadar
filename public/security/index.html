@@ -4,50 +4,44 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Security · StackRadar</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/security/style.css" />
 </head>
 <body>
   <header>
     <div class="header-row-1">
-      <a href="/" class="brand-link"><h1>📡 StackRadar</h1></a>
+      <h1>📡 StackRadar</h1>
       <input type="search" id="search" placeholder="Search advisories…" autocomplete="off" />
     </div>
 
     <div class="header-row-2">
-      <!-- Tabs -->
       <div class="tabs">
         <a class="tab" href="/">Release Notes <span class="badge" id="release-count"></span></a>
-        <button class="tab active">Security <span class="badge badge-cve" id="total-count"></span></button>
-        <a class="tab" href="/dbt-packages/">dbt Packages</a>
-        <a class="tab" href="/dbt-fusion/">dbt Fusion</a>
+        <a class="tab active" href="/security/">Security <span class="badge badge-cve" id="total-count"></span></a>
+        <a class="tab" href="/dbt-packages/">dbt Packages <span class="badge" id="pkg-count"></span></a>
+        <a class="tab" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
       </div>
 
       <div class="divider"></div>
 
-      <!-- Action = primary filter -->
-      <div class="inline-filters">
-        <button class="chip active" data-action="all">All</button>
-        <button class="chip" data-action="patch-now">Patch now</button>
-        <button class="chip" data-action="patch-soon">Patch soon</button>
-        <button class="chip" data-action="monitor">Monitor</button>
-        <button class="chip" data-action="safe">Safe</button>
-      </div>
+      <select id="action-filter" class="tag-select">
+        <option value="all">All actions</option>
+        <option value="patch-now">Patch now</option>
+        <option value="patch-soon">Patch soon</option>
+        <option value="monitor">Monitor</option>
+        <option value="safe">Safe</option>
+      </select>
 
-      <div class="divider"></div>
+      <select id="age-filter" class="tag-select">
+        <option value="all">All dates</option>
+        <option value="recent">Recent</option>
+        <option value="old">Too old</option>
+      </select>
 
-      <!-- Age toggle -->
-      <div class="inline-filters">
-        <button class="chip active" data-age="all">All dates</button>
-        <button class="chip"        data-age="recent">Recent</button>
-        <button class="chip"        data-age="old">Too old</button>
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- Repo chips (populated by JS) -->
-      <div class="inline-filters" id="repo-filters"></div>
+      <select id="repo-filter" class="tag-select">
+        <option value="all">All repos</option>
+      </select>
     </div>
   </header>
 
@@ -105,5 +99,6 @@
   </aside>
 
   <script type="module" src="/security/app.js"></script>
+  <footer class="site-footer">Made by <a href="https://camillelebrun.fr" target="_blank" rel="noopener">Camille Lebrun</a></footer>
 </body>
 </html>

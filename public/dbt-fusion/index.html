@@ -4,27 +4,35 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dbt Fusion · StackRadar</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header>
+    <!-- Row 1: Title + Search -->
     <div class="header-row-1">
-      <div style="display:flex;align-items:center;gap:16px">
-        <a href="/" class="back-link">← StackRadar</a>
-        <h1>dbt Fusion</h1>
-      </div>
+      <h1>📡 StackRadar</h1>
       <input type="search" id="search" placeholder="Search releases…" autocomplete="off" />
     </div>
 
     <div class="header-row-2">
-      <div class="inline-filters" id="tag-filters">
-        <button class="chip active" data-tag="all">All <span class="badge" id="fusion-count"></span></button>
+      <div class="tabs">
+        <a class="tab" href="/">Release Notes <span class="badge" id="release-count"></span></a>
+        <a class="tab" href="/security/">Security <span class="badge badge-cve" id="advisory-count"></span></a>
+        <a class="tab" href="/dbt-packages/">dbt Packages <span class="badge" id="pkg-count"></span></a>
+        <a class="tab active" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
       </div>
 
-      <div class="divider" id="tag-divider" style="display:none"></div>
+      <div class="divider"></div>
 
-      <button class="chip active" id="fusion-latest-toggle">Latest only</button>
+      <select id="tag-select" class="tag-select">
+        <option value="all">All tags</option>
+      </select>
+
+      <select id="latest-select" class="tag-select">
+        <option value="latest">Latest only</option>
+        <option value="all">All versions</option>
+      </select>
     </div>
   </header>
 
@@ -35,8 +43,8 @@
         <path d="M8 7v5M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>
-        <strong>dbt Fusion</strong> is Rust-based dbt engine, currently in preview.
-        Releases sourced from <em>CHANGELOG.md</em> · minor releases only · patches excluded unless prod-breaking.
+        <strong>dbt Fusion</strong> is dbt's new Rust-based engine — tracked separately because it uses a distinct versioning scheme and release channel (preview builds via <em>CHANGELOG.md</em>, not GitHub releases).
+        Minor releases only · patches excluded unless prod-breaking.
       </span>
     </div>
     <div id="fusion-grid" class="bento-grid"></div>
@@ -76,5 +84,6 @@
   </aside>
 
   <script type="module" src="/dbt-fusion/app.js"></script>
+  <footer class="site-footer">Made by <a href="https://camillelebrun.fr" target="_blank" rel="noopener">Camille Lebrun</a></footer>
 </body>
 </html>

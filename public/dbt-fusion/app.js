@@ -13,7 +13,7 @@ let latestOnly = true;
 document.addEventListener('DOMContentLoaded', () => {
   setupDrawer();
   setupSearch();
-  setupLatestToggle();
+  setupLatestSelect();
   loadReleases();
 });
 
@@ -30,12 +30,26 @@ async function loadReleases() {
     allReleases = records.filter(r =>
       r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion'
     );
+    const advisories = Array.isArray(data) ? [] : (data.advisories ?? []);
     loading.classList.add('hidden');
+    setCrossTabCounts(records, advisories);
     buildTagFilters(allReleases);
     render();
   } catch (err) {
     loading.className = 'empty-state';
     loading.textContent = `⚠ Failed to load: ${err.message}`;
+  }
+}
+
+function setCrossTabCounts(releases, advisories) {
+  const el = id => document.getElementById(id);
+  const nonPkg = releases.filter(r => r.group !== 'dbt-packages' && r.group !== 'dbt-fusion' && r.repo !== 'dbt-labs/dbt-fusion');
+  if (el('release-count'))  el('release-count').textContent  = nonPkg.length || '';
+  if (el('advisory-count')) el('advisory-count').textContent = advisories.length || '';
+  const pkgUnique = new Set(releases.filter(r => r.group === 'dbt-packages').map(r => r.repo)).size;
+  if (el('pkg-count')) {
+    el('pkg-count').textContent = pkgUnique || '';
+    el('pkg-count').title = `${pkgUnique} packages tracked · latest release per package`;
   }
 }
 
@@ -50,31 +64,18 @@ function buildTagFilters(releases) {
   const tags = Object.keys(tagCounts).sort();
   if (!tags.length) return;
 
-  const container = document.getElementById('tag-filters');
-  const divider = document.getElementById('tag-divider');
-
-  container.innerHTML =
-    `<button class="chip active" data-tag="all">All <span class="badge" id="fusion-count"></span></button>` +
-    tags.map(t => `<button class="chip" data-tag="${esc(t)}">${esc(t)}</button>`).join('');
-
-  container.querySelectorAll('[data-tag]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('[data-tag]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeTag = btn.dataset.tag;
-      render();
-    });
+  const select = document.getElementById('tag-select');
+  select.innerHTML = `<option value="all">All tags</option>` +
+    tags.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  select.addEventListener('change', e => {
+    activeTag = e.target.value;
+    render();
   });
-
-  divider.style.display = '';
 }
 
-function setupLatestToggle() {
-  const toggle = document.getElementById('fusion-latest-toggle');
-  toggle.addEventListener('click', () => {
-    latestOnly = !latestOnly;
-    toggle.textContent = latestOnly ? 'Latest only' : 'All versions';
-    toggle.classList.toggle('active', latestOnly);
+function setupLatestSelect() {
+  document.getElementById('latest-select').addEventListener('change', e => {
+    latestOnly = e.target.value === 'latest';
     render();
   });
 }
@@ -109,8 +110,9 @@ function render() {
     );
   }
 
+
   const countEl = document.getElementById('fusion-count');
-  if (countEl) countEl.textContent = latestOnly ? (allReleases.length ? '1' : '') : (allReleases.length || '');
+  if (countEl) countEl.textContent = filtered.length || '';
 
   const grid = document.getElementById('fusion-grid');
   const empty = document.getElementById('empty-fusion');
@@ -128,7 +130,7 @@ function render() {
     const tags     = a.tags ?? [];
     const changes  = (a.key_changes ?? []).slice(0, 3);
 
-    const changesList = changes.map(c => `<li>${esc(c)}</li>`).join('');
+    const changesList = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
     const tagChips    = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
 
     return `<article class="card" data-idx="${idx}">
@@ -138,7 +140,7 @@ function render() {
   </div>
   <h3 class="card-title">${esc(r.name || r.tag)}</h3>
   <p class="card-date">${formatDate(r.published_at)}</p>
-  <p class="card-summary">${esc(a.summary ?? '')}</p>
+  <p class="card-summary">${renderInline(a.summary ?? '')}</p>
   ${changesList ? `<ul class="card-changes">${changesList}</ul>` : ''}
   <div class="card-footer">
     ${tagChips ? `<div class="tags">${tagChips}</div>` : '<div></div>'}
@@ -183,13 +185,13 @@ function openDrawer(record) {
 
   document.getElementById('drawer-title').textContent = record.name || record.tag;
   document.getElementById('drawer-date').textContent  = formatDate(record.published_at);
-  document.getElementById('drawer-summary').textContent = a.summary ?? '';
+  document.getElementById('drawer-summary').innerHTML = renderInline(a.summary ?? '');
 
   const changesWrap = document.getElementById('drawer-changes-wrap');
   const changesList = document.getElementById('drawer-changes');
   const changes = a.key_changes ?? [];
   if (changes.length) {
-    changesList.innerHTML = changes.map(c => `<li>${esc(c)}</li>`).join('');
+    changesList.innerHTML = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
     changesWrap.classList.remove('hidden');
   } else {
     changesWrap.classList.add('hidden');
@@ -232,6 +234,10 @@ function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderInline(str) {
+  return esc(str).replace(/`([^`]+)`/g, '<code>$1</code>');
 }
 
 function formatDate(iso) {

@@ -4,33 +4,49 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dbt Packages · StackRadar</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="stylesheet" href="/style.css" />
+  <style>.card-repo { text-transform: none; }</style>
 </head>
 <body>
   <header>
-    <div class="header-row-1">
-      <div style="display:flex;align-items:center;gap:16px">
-        <a href="/" class="back-link">← StackRadar</a>
-        <h1>dbt Packages</h1>
-      </div>
-      <input type="search" id="search" placeholder="Search packages…" autocomplete="off" />
-    </div>
+<!-- Row 1: Title + Search -->
+<div class="header-row-1">
+  <h1>📡 StackRadar</h1>
+  <input type="search" id="search" placeholder="Search packages…" autocomplete="off" />
+</div>
 
     <div class="header-row-2">
-      <div class="inline-filters" id="pkg-type-filters">
-        <button class="chip active" data-pkgtype="all">All <span class="badge" id="pkg-count"></span></button>
-        <button class="chip" data-pkgtype="utils">Utils</button>
-        <button class="chip" data-pkgtype="data-quality">Data Quality</button>
+      <div class="tabs">
+        <a class="tab" href="/">Release Notes <span class="badge" id="release-count"></span></a>
+        <a class="tab" href="/security/">Security <span class="badge badge-cve" id="advisory-count"></span></a>
+        <a class="tab active" href="/dbt-packages/">dbt Packages <span class="badge" id="pkg-count"></span></a>
+        <a class="tab" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
       </div>
 
       <div class="divider"></div>
 
-      <div class="inline-filters" id="pkg-name-filters"></div>
+      <select id="pkg-type-select" class="tag-select">
+        <option value="all">All types</option>
+        <option value="utils">Utils</option>
+        <option value="data-quality">Data Quality</option>
+      </select>
 
-      <div class="divider" id="pkg-name-divider"></div>
+      <select id="pkg-sev-select" class="tag-select">
+        <option value="all">Any severity</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
 
-      <button class="chip active" id="pkg-latest-toggle">Latest only</button>
+      <select id="pkg-name-select" class="tag-select">
+        <option value="all">All packages</option>
+      </select>
+
+      <select id="pkg-latest-select" class="tag-select">
+        <option value="latest">Latest only</option>
+        <option value="all">All versions</option>
+      </select>
     </div>
   </header>
 
@@ -43,7 +59,8 @@
       <span>
         <strong>What's shown:</strong>
         stable releases only · minor &amp; major always · patches only if prod-breaking ·
-        one card per package by default (toggle <em>Latest only</em> to see history)
+        one card per package by default (toggle <em>Latest only</em> to see history).
+        The badge in the navigation tab counts tracked packages, not total releases — one per package, latest only.
       </span>
     </div>
     <div id="pkg-grid" class="bento-grid"></div>
@@ -105,5 +122,6 @@
 
   <div id="pkg-global-tooltip" class="pkg-global-tooltip" aria-hidden="true"></div>
   <script type="module" src="/dbt-packages/app.js"></script>
+  <footer class="site-footer">Made by <a href="https://camillelebrun.fr" target="_blank" rel="noopener">Camille Lebrun</a></footer>
 </body>
 </html>

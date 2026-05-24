@@ -40,8 +40,7 @@ let activeRepo    = 'all';
 document.addEventListener('DOMContentLoaded', () => {
   setupDrawer();
   setupSearch();
-  setupActionFilters();
-  setupAgeFilters();
+  setupSelectFilters();
   loadAdvisories();
 });
 
@@ -65,6 +64,21 @@ async function loadAdvisories() {
     const releases = Array.isArray(data) ? data : (data.releases ?? []);
     const nonPkg = releases.filter(r => r.group !== 'dbt-packages' && r.group !== 'dbt-fusion' && r.repo !== 'dbt-labs/dbt-fusion');
     document.getElementById('release-count').textContent = nonPkg.length || '';
+    const pkgBadge = document.getElementById('pkg-count');
+    if (pkgBadge) {
+      const pkgUnique = new Set(releases.filter(r => r.group === 'dbt-packages').map(r => r.repo)).size;
+      pkgBadge.textContent = pkgUnique || '';
+      pkgBadge.title = `${pkgUnique} packages tracked · latest release per package`;
+    }
+    const fusionBadge = document.getElementById('fusion-count');
+    if (fusionBadge) {
+      const fusionRecs  = releases.filter(r => r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion');
+      const fusionLatest = fusionRecs.length
+        ? [fusionRecs.reduce((best, r) => new Date(r.published_at) > new Date(best.published_at) ? r : best)]
+        : [];
+      fusionBadge.textContent = fusionLatest.length || '';
+      fusionBadge.title = `${fusionLatest.length} latest release · ${fusionRecs.length} total in history`;
+    }
     buildRepoFilters(allAdvisories);
     renderAll();
     applyFilters();
@@ -138,25 +152,14 @@ function applyFilters() {
   );
 }
 
-function setupActionFilters() {
-  document.querySelectorAll('.chip[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.chip[data-action]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeAction = btn.dataset.action;
-      applyFilters();
-    });
+function setupSelectFilters() {
+  document.getElementById('action-filter').addEventListener('change', e => {
+    activeAction = e.target.value;
+    applyFilters();
   });
-}
-
-function setupAgeFilters() {
-  document.querySelectorAll('.chip[data-age]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.chip[data-age]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeAge = btn.dataset.age;
-      applyFilters();
-    });
+  document.getElementById('age-filter').addEventListener('change', e => {
+    activeAge = e.target.value;
+    applyFilters();
   });
 }
 
@@ -168,21 +171,12 @@ function buildRepoFilters(advisories) {
   const repos = [...new Set(advisories.map(a => a.repo).filter(Boolean))].sort();
   if (repos.length <= 1) return;
 
-  const container = document.getElementById('repo-filters');
-  container.innerHTML =
-    `<button class="chip active" data-repo="all">All repos</button>` +
-    repos.map(r => {
-      const slug = r.split('/')[1];
-      return `<button class="chip" data-repo="${esc(r)}">${esc(slug)}</button>`;
-    }).join('');
-
-  container.querySelectorAll('.chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeRepo = btn.dataset.repo;
-      applyFilters();
-    });
+  const select = document.getElementById('repo-filter');
+  select.innerHTML = `<option value="all">All repos</option>` +
+    repos.map(r => `<option value="${esc(r)}">${esc(r.split('/')[1])}</option>`).join('');
+  select.addEventListener('change', e => {
+    activeRepo = e.target.value;
+    applyFilters();
   });
 }
 

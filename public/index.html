@@ -4,54 +4,41 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>StackRadar</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
-    <!-- Row 1: Title + Search -->
-    <div class="header-row-1">
-      <h1>📡 StackRadar</h1>
-      <input type="search" id="search" placeholder="Search..." autocomplete="off" />
-    </div>
+  <!-- Row 1: Title + Search -->
+  <div class="header-row-1">
+    <h1>📡 StackRadar</h1>
+    <input type="search" id="search" placeholder="Search..." autocomplete="off" />
+  </div>
 
-    <!-- Row 2: Tabs + Filters inline -->
     <div class="header-row-2">
-      <!-- Tabs -->
       <div class="tabs">
-        <button class="tab active" data-tab="digest">
-          Release Notes <span class="badge" id="digest-count"></span>
-        </button>
-        <a class="tab" href="/security/">
-          Security <span class="badge badge-cve" id="advisory-count"></span>
-        </a>
-        <a class="tab" href="/dbt-packages/">dbt Packages</a>
-        <a class="tab" href="/dbt-fusion/">dbt Fusion</a>
+        <button class="tab active" data-tab="digest">Release Notes <span class="badge" id="digest-count"></span></button>
+        <a class="tab" href="/security/">Security <span class="badge badge-cve" id="advisory-count"></span></a>
+        <a class="tab" href="/dbt-packages/">dbt Packages <span class="badge" id="pkg-count"></span></a>
+        <a class="tab" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
       </div>
 
       <div class="divider"></div>
 
-      <!-- Severity chips -->
-      <div class="inline-filters">
-        <button class="chip active" data-sev="all">All</button>
-        <button class="chip" data-sev="critical">critical</button>
-        <button class="chip" data-sev="high">high</button>
-        <button class="chip" data-sev="medium">medium</button>
-      </div>
+      <select id="sev-filter" class="tag-select">
+        <option value="all">All severities</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+      </select>
 
-      <div class="divider"></div>
+      <select id="tag-filter" class="tag-select">
+        <option value="all">All types</option>
+      </select>
 
-      <!-- Tag dropdown -->
-      <div class="inline-filters">
-        <select id="tag-filter" class="tag-select">
-          <option value="all">All types</option>
-        </select>
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- Group chips -->
-      <div class="inline-filters" id="repo-filters-inline"></div>
+      <select id="group-filter" class="tag-select">
+        <option value="all">All groups</option>
+      </select>
     </div>
   </header>
 
@@ -106,5 +93,6 @@
   </aside>
 
   <script type="module" src="app.js"></script>
+  <footer class="site-footer">Made by <a href="https://camillelebrun.fr" target="_blank" rel="noopener">Camille Lebrun</a></footer>
 </body>
 </html>
