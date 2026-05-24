@@ -4,7 +4,7 @@ import json
 import logging
 
 from mistralai.client import Mistral
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 from src.config import LLM_MAX_TOKENS, MISTRAL_MODEL
 from src.prompts.bigquery_release_analysis import BIGQUERY_RELEASE_ANALYSIS_PROMPT
@@ -41,13 +41,14 @@ class BigQueryAnalysisResult(BaseModel):
     severity: str
     tags: list[str]
 
+    @model_validator(mode="before")
     @classmethod
-    def model_validate(cls, obj: object, **kwargs: object) -> "BigQueryAnalysisResult":
-        if isinstance(obj, dict):
+    def _coerce_lists(cls, data: object) -> object:
+        if isinstance(data, dict):
             for field in ("key_changes", "breaking_changes", "tags"):
-                if field in obj:
-                    obj[field] = _coerce_str_list(obj[field])  # type: ignore[index]
-        return super().model_validate(obj, **kwargs)
+                if field in data:
+                    data[field] = _coerce_str_list(data[field])
+        return data
 
 
 class AnalysisResult(BaseModel):
