@@ -135,7 +135,7 @@ function getLatestPerRepo(pkgs) {
       latestMap.set(r.repo, r);
     }
   });
-  return [...latestMap.values()].sort((a, b) => a.repo.localeCompare(b.repo));
+  return [...latestMap.values()].sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
 }
 
 function render() {
