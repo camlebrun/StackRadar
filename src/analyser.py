@@ -8,10 +8,10 @@ from pydantic import BaseModel, ValidationError
 
 from src.config import LLM_MAX_TOKENS, MISTRAL_MODEL
 from src.prompts.bigquery_release_analysis import BIGQUERY_RELEASE_ANALYSIS_PROMPT
-from src.prompts.lakehouse_release_analysis import LAKEHOUSE_RELEASE_ANALYSIS_PROMPT
 from src.prompts.dbt_package_analysis import DBT_PACKAGE_ANALYSIS_PROMPT
 from src.prompts.fusion_historical import FUSION_HISTORICAL_PROMPT
 from src.prompts.fusion_release_analysis import FUSION_RELEASE_ANALYSIS_PROMPT
+from src.prompts.lakehouse_release_analysis import LAKEHOUSE_RELEASE_ANALYSIS_PROMPT
 from src.prompts.release_analysis import RELEASE_ANALYSIS_PROMPT
 
 logger = logging.getLogger(__name__)

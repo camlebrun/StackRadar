@@ -309,7 +309,10 @@ def fetch_gcp_docs_releases(
 
     raw = resp.text
     since_dt = datetime.fromisoformat(since.replace("Z", "+00:00")) if since else None
-    min_dt = datetime.fromisoformat(min_date + "T00:00:00+00:00") if (min_date and not since_dt) else None
+    if min_date and not since_dt:
+        min_dt = datetime.fromisoformat(min_date + "T00:00:00+00:00")
+    else:
+        min_dt = None
 
     sections = re.split(r"^## ", raw, flags=re.MULTILINE)
     releases: list[dict[str, object]] = []

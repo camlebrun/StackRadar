@@ -153,7 +153,8 @@ def _post_process_analysis(
     """Normalise tags to the canonical whitelist and apply semver-based severity floor."""
     if source == "gcp_docs":
         raw = analysis.get("tags", [])
-        analysis = {**analysis, "tags": [t for t in (raw if isinstance(raw, list) else []) if t in _GCP_VALID_TAGS][:4]}
+        valid = [t for t in (raw if isinstance(raw, list) else []) if t in _GCP_VALID_TAGS]
+        analysis = {**analysis, "tags": valid[:4]}
     elif not is_dbt_package:
         raw = analysis.get("tags", [])
         analysis = {**analysis, "tags": _normalize_tags(raw if isinstance(raw, list) else [])}
@@ -328,9 +329,13 @@ def _process_repos(
                 is_historical = tag == HISTORICAL_TAG
                 if source == "gcp_docs":
                     if group == "lakehouse":
-                        analysis, error = analyse_lakehouse_release({**release, "repo": repo}, llm_key)
+                        analysis, error = analyse_lakehouse_release(
+                            {**release, "repo": repo}, llm_key
+                        )
                     else:
-                        analysis, error = analyse_bigquery_release({**release, "repo": repo}, llm_key)
+                        analysis, error = analyse_bigquery_release(
+                            {**release, "repo": repo}, llm_key
+                        )
                 elif is_historical:
                     analysis, error = analyse_fusion_historical({**release, "repo": repo}, llm_key)
                 elif source == "changelog":
