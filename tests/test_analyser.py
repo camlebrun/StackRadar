@@ -2,8 +2,10 @@ import json
 from unittest.mock import MagicMock, patch
 
 from src.analyser import (
+    analyse_bigquery_release,
     analyse_fusion_historical,
     analyse_fusion_release,
+    analyse_lakehouse_release,
     analyse_release,
     call_llm,
 )
@@ -171,3 +173,75 @@ def test_fusion_historical_bad_meta_does_not_crash() -> None:
         analysis, error = analyse_fusion_historical(release, "fake-key")
     assert error is None
     assert analysis is not None
+
+
+# ── BigQuery / Lakehouse analyser ────────────────────────────────────────────
+
+_BQ_ANALYSIS = {
+    "summary": "Python UDFs are now GA.",
+    "key_changes": ["[GA][Python UDFs] Now generally available."],
+    "breaking_changes": [],
+    "migration_notes": "",
+    "cost_and_performance_impact": "",
+    "severity": "low",
+    "tags": ["ga-migration"],
+}
+
+
+def _make_gcp_release(tag: str = "2026-05-20") -> dict[str, object]:
+    return {
+        "repo": "google/bigquery",
+        "tag_name": tag,
+        "name": f"BigQuery — {tag}",
+        "body": "Feature Python UDFs are now Generally Available (GA).",
+        "published_at": f"{tag}T00:00:00+00:00",
+    }
+
+
+def test_bigquery_happy_path() -> None:
+    mock_client = _mock_mistral_client(json.dumps(_BQ_ANALYSIS))
+    with patch("src.analyser.Mistral", return_value=mock_client):
+        analysis, error = analyse_bigquery_release(_make_gcp_release(), "fake-key")
+    assert error is None
+    assert analysis is not None
+    assert analysis["severity"] == "low"
+    assert analysis["tags"] == ["ga-migration"]
+
+
+def test_bigquery_invalid_json_returns_none() -> None:
+    with patch("src.analyser.Mistral", return_value=_mock_mistral_client("not json")):
+        analysis, error = analyse_bigquery_release(_make_gcp_release(), "fake-key")
+    assert analysis is None
+    assert error is not None
+
+
+def test_bigquery_coerces_dict_in_breaking_changes() -> None:
+    payload = {
+        **_BQ_ANALYSIS,
+        "breaking_changes": [{"text": "ActionValue changes from INT to FLOAT"}],
+    }
+    mock_client = _mock_mistral_client(json.dumps(payload))
+    with patch("src.analyser.Mistral", return_value=mock_client):
+        analysis, error = analyse_bigquery_release(_make_gcp_release(), "fake-key")
+    assert error is None
+    assert analysis is not None
+    assert isinstance(analysis["breaking_changes"][0], str)
+
+
+def test_lakehouse_happy_path() -> None:
+    payload = {**_BQ_ANALYSIS, "tags": ["iceberg", "catalog"]}
+    mock_client = _mock_mistral_client(json.dumps(payload))
+    with patch("src.analyser.Mistral", return_value=mock_client):
+        release = {**_make_gcp_release(), "repo": "google/lakehouse"}
+        analysis, error = analyse_lakehouse_release(release, "fake-key")
+    assert error is None
+    assert analysis is not None
+    assert "iceberg" in analysis["tags"]
+
+
+def test_lakehouse_invalid_json_returns_none() -> None:
+    with patch("src.analyser.Mistral", return_value=_mock_mistral_client("not json")):
+        release = {**_make_gcp_release(), "repo": "google/lakehouse"}
+        analysis, error = analyse_lakehouse_release(release, "fake-key")
+    assert analysis is None
+    assert error is not None

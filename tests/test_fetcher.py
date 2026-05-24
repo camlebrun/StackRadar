@@ -7,6 +7,7 @@ from src.fetcher import (
     GitHubFetchError,
     backfill_releases,
     fetch_changelog_releases,
+    fetch_gcp_docs_releases,
     filter_trivial_changes,
     get_new_releases,
 )
@@ -271,3 +272,121 @@ def test_changelog_raises_on_api_error() -> None:
         with pytest.raises(GitHubFetchError) as exc:
             fetch_changelog_releases("owner", "repo")
     assert exc.value.status == 404
+
+
+# ── fetch_gcp_docs_releases ──────────────────────────────────────────────────
+
+_SAMPLE_GCP_DOCS = """\
+# BigQuery release notes
+
+## May 20, 2026
+
+Feature Python UDFs are now Generally Available (GA).
+
+## May 14, 2026
+
+Issue Support for AI.KEY_DRIVERS has been temporarily disabled.
+
+## December 15, 2025
+
+Feature Some old feature.
+"""
+
+
+def _make_text_resp(text: str) -> MagicMock:
+    resp = MagicMock()
+    resp.ok = True
+    resp.status_code = 200
+    resp.text = text
+    return resp
+
+
+def test_gcp_docs_parses_date_sections() -> None:
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(_SAMPLE_GCP_DOCS)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+        )
+    tags = [r["tag_name"] for r in result]
+    assert "2026-05-20" in tags
+    assert "2026-05-14" in tags
+
+
+def test_gcp_docs_min_date_excludes_old_entries() -> None:
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(_SAMPLE_GCP_DOCS)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+            min_date="2026-01-01",
+        )
+    tags = [r["tag_name"] for r in result]
+    assert "2025-12-15" not in tags
+    assert "2026-05-20" in tags
+
+
+def test_gcp_docs_since_skips_on_or_before_cursor() -> None:
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(_SAMPLE_GCP_DOCS)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+            since="2026-05-14T00:00:00+00:00",
+        )
+    tags = [r["tag_name"] for r in result]
+    assert "2026-05-14" not in tags
+    assert "2026-05-20" in tags
+
+
+def test_gcp_docs_returns_ascending_order() -> None:
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(_SAMPLE_GCP_DOCS)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+            min_date="2026-01-01",
+        )
+    dates = [r["published_at"] for r in result]
+    assert dates == sorted(dates)
+
+
+def test_gcp_docs_record_fields() -> None:
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(_SAMPLE_GCP_DOCS)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+            min_date="2026-01-01",
+        )
+    r = next(r for r in result if r["tag_name"] == "2026-05-20")
+    assert r["name"] == "BigQuery — May 20, 2026"
+    assert "Python UDFs" in str(r["body"])
+    assert "may-20-2026" in str(r["html_url"])
+    assert r["prerelease"] is False
+
+
+def test_gcp_docs_raises_on_http_error() -> None:
+    resp = MagicMock()
+    resp.ok = False
+    resp.status_code = 404
+    with patch("src.fetcher.requests.get", return_value=resp):
+        with pytest.raises(RuntimeError, match="404"):
+            fetch_gcp_docs_releases(
+                url="https://example.com/release-notes.md.txt",
+                display_name="BigQuery",
+                docs_base_url="https://example.com/release-notes",
+            )
+
+
+def test_gcp_docs_skips_sections_without_body() -> None:
+    docs = "## May 20, 2026\n\n## May 14, 2026\n\nFeature something."
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(docs)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+        )
+    tags = [r["tag_name"] for r in result]
+    assert "2026-05-20" not in tags
+    assert "2026-05-14" in tags
