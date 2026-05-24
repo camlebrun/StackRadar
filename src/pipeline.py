@@ -10,9 +10,11 @@ from typing import Any
 import requests as _http
 
 from src.analyser import (
+    analyse_bigquery_release,
     analyse_dbt_package_release,
     analyse_fusion_historical,
     analyse_fusion_release,
+    analyse_lakehouse_release,
     analyse_release,
 )
 from src.digest import get_digest
@@ -20,6 +22,7 @@ from src.fetcher import (
     HISTORICAL_TAG,
     backfill_releases,
     fetch_changelog_releases,
+    fetch_gcp_docs_releases,
     fetch_readme,
     get_new_releases,
 )
@@ -89,6 +92,26 @@ _VALID_TAGS = frozenset(
     }
 )
 
+_GCP_VALID_TAGS = frozenset(
+    {
+        "breaking",
+        "security",
+        "performance",
+        "cost-optimization",
+        "ai-ml",
+        "graph-db",
+        "data-transfer",
+        "sql-syntax",
+        "iam-governance",
+        "ga-migration",
+        # Lakehouse-specific
+        "iceberg",
+        "catalog",
+        "data-ingestion",
+        "open-format",
+    }
+)
+
 
 def _normalize_tags(tags: list[str]) -> list[str]:
     seen: set[str] = set()
@@ -128,7 +151,11 @@ def _post_process_analysis(
     is_dbt_package: bool,
 ) -> dict[str, Any]:
     """Normalise tags to the canonical whitelist and apply semver-based severity floor."""
-    if not is_dbt_package:
+    if source == "gcp_docs":
+        raw = analysis.get("tags", [])
+        valid = [t for t in (raw if isinstance(raw, list) else []) if t in _GCP_VALID_TAGS]
+        analysis = {**analysis, "tags": valid[:4]}
+    elif not is_dbt_package:
         raw = analysis.get("tags", [])
         analysis = {**analysis, "tags": _normalize_tags(raw if isinstance(raw, list) else [])}
 
@@ -250,7 +277,16 @@ def _process_repos(
             source = repo_cfg.get("source", "github")
             cursor = get_cursor(s3, bucket, owner, name)
 
-            if source == "changelog":
+            if source == "gcp_docs":
+                releases = fetch_gcp_docs_releases(
+                    url=repo_cfg["docs_url"],
+                    display_name=repo_cfg.get("display_name", name),
+                    docs_base_url=repo_cfg.get("docs_base_url", ""),
+                    since=cursor,
+                    min_date=repo_cfg.get("since_date"),
+                )
+                logger.info("[%s] gcp_docs: %d releases", repo, len(releases))
+            elif source == "changelog":
                 releases = fetch_changelog_releases(owner, name, github_token, since=cursor)
                 logger.info("[%s] changelog: %d releases", repo, len(releases))
             elif cursor is None:
@@ -276,17 +312,31 @@ def _process_repos(
 
             new_count = 0
             latest_published_at = cursor
+            # For date-based sources, stop advancing the cursor past any LLM failure
+            # so the failed entry is retried on the next run.
+            llm_failed = False
 
             for release in releases:
                 tag = str(release.get("tag_name", ""))
                 if release_exists(s3, bucket, owner, name, tag):
+                    if not llm_failed:
+                        latest_published_at = str(release.get("published_at", ""))
                     continue
 
                 if llm_delay_s > 0 and new_count > 0:
                     time.sleep(llm_delay_s)
 
                 is_historical = tag == HISTORICAL_TAG
-                if is_historical:
+                if source == "gcp_docs":
+                    if group == "lakehouse":
+                        analysis, error = analyse_lakehouse_release(
+                            {**release, "repo": repo}, llm_key
+                        )
+                    else:
+                        analysis, error = analyse_bigquery_release(
+                            {**release, "repo": repo}, llm_key
+                        )
+                elif is_historical:
                     analysis, error = analyse_fusion_historical({**release, "repo": repo}, llm_key)
                 elif source == "changelog":
                     analysis, error = analyse_fusion_release({**release, "repo": repo}, llm_key)
@@ -303,6 +353,7 @@ def _process_repos(
 
                 if analysis is None:
                     logger.warning("[%s] skipping %s — LLM analysis failed: %s", repo, tag, error)
+                    llm_failed = True
                     continue
 
                 analysis = _post_process_analysis(analysis, release, source, is_dbt_package)
@@ -323,7 +374,8 @@ def _process_repos(
                 )
                 put_release(s3, bucket, record)
                 new_count += 1
-                latest_published_at = str(release.get("published_at", ""))
+                if not llm_failed:
+                    latest_published_at = str(release.get("published_at", ""))
 
             if latest_published_at and latest_published_at != cursor:
                 set_cursor(s3, bucket, owner, name, latest_published_at)

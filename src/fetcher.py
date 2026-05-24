@@ -280,6 +280,87 @@ def backfill_releases(
 
 
 # ---------------------------------------------------------------------------
+# Google Cloud Docs release notes fetcher (date-based, reusable across services)
+# ---------------------------------------------------------------------------
+
+_GCP_DOCS_TIMEOUT_S = 20
+_GCP_DATE_RE = re.compile(r"^(\w+ \d{1,2}, \d{4})$")
+
+
+def fetch_gcp_docs_releases(
+    url: str,
+    display_name: str,
+    docs_base_url: str,
+    since: str | None = None,
+    min_date: str | None = None,
+) -> list[dict[str, object]]:
+    """Fetch Google Cloud Docs release notes from a .md.txt URL.
+
+    Each ## Month DD, YYYY section becomes one release-like record.
+    url: the .md.txt source URL.
+    display_name: human label used in record name (e.g. 'BigQuery', 'Lakehouse').
+    docs_base_url: base URL for html_url anchors (e.g. 'https://cloud.google.com/bigquery/docs/release-notes').
+    since: ISO timestamp cursor — entries on or before this date are skipped.
+    min_date: ISO date lower bound used when since is None (e.g. '2026-01-01').
+    """
+    resp = requests.get(url, timeout=_GCP_DOCS_TIMEOUT_S)
+    if not resp.ok:
+        raise RuntimeError(f"{display_name} release notes fetch failed: {resp.status_code}")
+
+    raw = resp.text
+    since_dt = datetime.fromisoformat(since.replace("Z", "+00:00")) if since else None
+    if min_date and not since_dt:
+        min_dt = datetime.fromisoformat(min_date + "T00:00:00+00:00")
+    else:
+        min_dt = None
+
+    sections = re.split(r"^## ", raw, flags=re.MULTILINE)
+    releases: list[dict[str, object]] = []
+
+    for section in sections:
+        lines = section.strip().splitlines()
+        if not lines:
+            continue
+        header = lines[0].strip()
+        m = _GCP_DATE_RE.match(header)
+        if not m:
+            continue
+
+        try:
+            dt = datetime.strptime(m.group(1), "%B %d, %Y").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+
+        if since_dt and dt <= since_dt:
+            continue
+        if min_dt and dt < min_dt:
+            continue
+
+        body = "\n".join(lines[1:]).strip()
+        if not body:
+            continue
+
+        tag = dt.strftime("%Y-%m-%d")
+        anchor = dt.strftime("%B-%d-%Y").lower()
+
+        releases.append(
+            {
+                "tag_name": tag,
+                "name": f"{display_name} — {header}",
+                "body": body,
+                "published_at": dt.isoformat(),
+                "html_url": f"{docs_base_url}#{anchor}",
+                "prerelease": False,
+                "draft": False,
+                "id": None,
+                "author": None,
+            }
+        )
+
+    return sorted(releases, key=lambda r: str(r["published_at"]))
+
+
+# ---------------------------------------------------------------------------
 # Changelog-based fetcher (for repos with no GitHub releases, e.g. dbt-fusion)
 # ---------------------------------------------------------------------------
 
