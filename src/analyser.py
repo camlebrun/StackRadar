@@ -4,6 +4,12 @@ import json
 import logging
 
 from mistralai.client import Mistral
+from mistralai.client.models import (
+    AssistantMessageTypedDict,
+    SystemMessageTypedDict,
+    ToolMessageTypedDict,
+    UserMessageTypedDict,
+)
 from pydantic import BaseModel, ValidationError, model_validator
 
 from src.config import LLM_MAX_TOKENS, MISTRAL_MODEL
@@ -106,9 +112,15 @@ class AuthError(Exception):
 
 def _call_mistral(prompt: str, api_key: str) -> str:
     client = Mistral(api_key=api_key)
+    msgs: list[
+        SystemMessageTypedDict
+        | UserMessageTypedDict
+        | AssistantMessageTypedDict
+        | ToolMessageTypedDict
+    ] = [UserMessageTypedDict(role="user", content=prompt)]
     response = client.chat.complete(
         model=MISTRAL_MODEL,
-        messages=[{"role": "user", "content": prompt}],
+        messages=msgs,
         temperature=0,
         max_tokens=LLM_MAX_TOKENS,
         response_format={"type": "json_object"},
