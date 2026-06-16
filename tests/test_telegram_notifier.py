@@ -58,8 +58,10 @@ class TestFormatReleases:
 
     def test_missing_analysis_graceful(self):
         record = {
-            "repo": "org/repo", "tag": "v1.0.0",
-            "html_url": "https://x.com", "analysis": None,
+            "repo": "org/repo",
+            "tag": "v1.0.0",
+            "html_url": "https://x.com",
+            "analysis": None,
         }
         msg = _format_releases([record])
         assert "org/repo" in msg
@@ -85,6 +87,7 @@ class TestSendNotification:
     def test_api_failure_logs_warning_not_raises(self, caplog):
         with patch("src.telegram_notifier._http.post", side_effect=Exception("timeout")):
             import logging
+
             with caplog.at_level(logging.WARNING, logger="src.telegram_notifier"):
                 send_notification("tok", "chan", "msg")  # must not raise
         assert "timeout" in caplog.text
@@ -93,8 +96,10 @@ class TestSendNotification:
 class TestNotifyReleases:
     def _record(self):
         return {
-            "repo": "org/repo", "tag": "v1.0.0",
-            "html_url": "https://x.com", "analysis": {"summary": "Fix."},
+            "repo": "org/repo",
+            "tag": "v1.0.0",
+            "html_url": "https://x.com",
+            "analysis": {"summary": "Fix."},
         }
 
     def test_empty_records_makes_no_api_call(self):
