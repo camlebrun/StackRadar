@@ -1,13 +1,17 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
+
+from mistralai.client.models import UserMessageTypedDict
 
 from src.analyser import (
     _call_mistral,
     analyse_bigquery_release,
+    analyse_dbt_package_release,
     analyse_fusion_historical,
     analyse_fusion_release,
     analyse_lakehouse_release,
     analyse_release,
+    filter_trivial_changes,
 )
 
 _VALID_ANALYSIS = {
@@ -76,6 +80,20 @@ def test_call_mistral_returns_string() -> None:
     with patch("src.analyser.Mistral", return_value=client):
         result = _call_mistral("some prompt", "fake-key")
     assert result == '{"ok": true}'
+
+
+def test_call_mistral_sends_typed_user_message() -> None:
+    client = MagicMock()
+    client.chat.complete.return_value.choices[0].message.content = '{"ok": true}'
+    with patch("src.analyser.Mistral", return_value=client):
+        _call_mistral("hello world", "fake-key")
+    kwargs = client.chat.complete.call_args.kwargs
+    messages = kwargs["messages"]
+    assert len(messages) == 1
+    msg = messages[0]
+    assert msg == UserMessageTypedDict(role="user", content="hello world")
+    assert msg["role"] == "user"
+    assert msg["content"] == "hello world"
 
 
 # ── analyse_fusion_release ───────────────────────────────────────────────────
@@ -245,3 +263,109 @@ def test_lakehouse_invalid_json_returns_none() -> None:
         analysis, error = analyse_lakehouse_release(release, "fake-key")
     assert analysis is None
     assert error is not None
+
+
+# ── Validation de l'output LLM ───────────────────────────────────────────────
+
+
+def test_analyse_release_missing_required_field_returns_error() -> None:
+    """Le LLM oublie 'severity' → ValidationError → (None, message d'erreur)."""
+    payload = {k: v for k, v in _VALID_ANALYSIS.items() if k != "severity"}
+    with patch("src.analyser.Mistral", return_value=_mock_mistral_client(json.dumps(payload))):
+        analysis, error = analyse_release(_make_release(), "fake-key")
+    assert analysis is None
+    assert error is not None
+    assert "severity" in error
+
+
+def test_analyse_release_optional_fields_default_when_absent() -> None:
+    """Champs optionnels absents de l'output LLM → valeurs par défaut."""
+    minimal = {"summary": "Bug fixes.", "key_changes": ["Fix A"], "severity": "low", "tags": []}
+    with patch("src.analyser.Mistral", return_value=_mock_mistral_client(json.dumps(minimal))):
+        analysis, error = analyse_release(_make_release(), "fake-key")
+    assert error is None
+    assert analysis is not None
+    assert analysis["breaking_changes"] == []
+    assert analysis["migration_notes"] == ""
+    assert analysis["cve_references"] == []
+    assert analysis["worth_tracking"] is True
+
+
+def test_analyse_release_preserves_all_llm_fields() -> None:
+    """Tous les champs de l'output LLM sont bien retournés dans le dict final."""
+    payload = {**_VALID_ANALYSIS, "breaking_changes": ["API removed"], "migration_notes": "Use v2."}
+    with patch("src.analyser.Mistral", return_value=_mock_mistral_client(json.dumps(payload))):
+        analysis, error = analyse_release(_make_release(), "fake-key")
+    assert error is None
+    assert analysis is not None
+    assert analysis["breaking_changes"] == ["API removed"]
+    assert analysis["migration_notes"] == "Use v2."
+    assert analysis["summary"] == _VALID_ANALYSIS["summary"]
+    assert analysis["tags"] == _VALID_ANALYSIS["tags"]
+
+
+# ── filter_trivial_changes ───────────────────────────────────────────────────
+
+
+def test_filter_trivial_changes_removes_cosmetic_entries() -> None:
+    changes = ["Fix critical bug", "chore: bump version", "Update readme", "Add Python 3.12"]
+    result = filter_trivial_changes(changes)
+    assert "Fix critical bug" in result
+    assert "Add Python 3.12" in result
+    assert not any("chore" in c.lower() or "readme" in c.lower() for c in result)
+
+
+def test_filter_trivial_changes_keeps_all_meaningful() -> None:
+    changes = ["Breaking: remove deprecated API", "Add Snowflake adapter", "Fix auth bug"]
+    assert filter_trivial_changes(changes) == changes
+
+
+def test_filter_trivial_changes_ignores_non_strings() -> None:
+    changes: list[str] = []  # type: ignore[assignment]
+    mixed: list[object] = ["Valid change", 42, None, {"key": "value"}]
+    result = filter_trivial_changes(mixed)  # type: ignore[arg-type]
+    assert result == ["Valid change"]
+
+
+# ── analyse_dbt_package_release ──────────────────────────────────────────────
+
+
+def _make_dbt_release(tag: str = "v1.2.0") -> dict[str, object]:
+    return {"repo": "dbt-labs/dbt-utils", "tag_name": tag, "name": tag, "body": "Bug fixes."}
+
+
+def test_dbt_stale_returns_summary_without_llm_call() -> None:
+    """stale=True → aucun appel LLM, résumé extrait du README."""
+    readme = "dbt-utils is a package for common macros.\n\nInstallation: add to packages.yml."
+    with patch("src.analyser.Mistral") as mock_cls:
+        analysis, error = analyse_dbt_package_release(
+            _make_dbt_release(), readme=readme, stale=True
+        )
+    mock_cls.assert_not_called()
+    assert error is None
+    assert analysis is not None
+    assert analysis["severity"] == "none"
+    assert analysis["is_prod_breaking_bug"] is False
+    assert "No release in over a year" in str(analysis["summary"])
+
+
+def test_dbt_llm_output_trivial_changes_are_filtered() -> None:
+    """Les trivial changes dans l'output LLM sont filtrées avant le retour."""
+    payload = {
+        "purpose": "Common macros for dbt.",
+        "summary": "Minor release.",
+        "key_changes": ["Fix critical bug", "chore: bump changelog", "Update docs"],
+        "is_prod_breaking_bug": False,
+        "severity": "low",
+        "tags": ["bug-fix"],
+    }
+    with patch("src.analyser.Mistral", return_value=_mock_mistral_client(json.dumps(payload))):
+        analysis, error = analyse_dbt_package_release(
+            _make_dbt_release(), readme="", api_key="fake-key"
+        )
+    assert error is None
+    assert analysis is not None
+    key_changes = analysis["key_changes"]
+    assert isinstance(key_changes, list)
+    assert "Fix critical bug" in key_changes
+    assert not any("chore" in c.lower() or "docs" in c.lower() for c in key_changes)
