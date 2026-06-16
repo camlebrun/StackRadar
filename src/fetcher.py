@@ -42,6 +42,7 @@ _PROD_BREAKING_BUG_PATTERNS = [
     "incorrect result",
 ]
 
+
 class GitHubFetchError(Exception):
     def __init__(self, status: int, message: str) -> None:
         super().__init__(f"GitHub API error {status}: {message}")
@@ -62,7 +63,6 @@ def fetch_readme(owner: str, repo: str, token: str | None = None) -> str:
     except Exception as e:
         logger.warning("Could not fetch README for %s/%s: %s", owner, repo, e)
     return ""
-
 
 
 def heuristic_dbt_analysis(

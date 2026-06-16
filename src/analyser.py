@@ -108,7 +108,7 @@ def _call_mistral(prompt: str, api_key: str) -> str:
     client = Mistral(api_key=api_key)
     response = client.chat.complete(
         model=MISTRAL_MODEL,
-        messages=[{"role": "user", "content": prompt}],  # type: ignore[arg-type]
+        messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=LLM_MAX_TOKENS,
         response_format={"type": "json_object"},
