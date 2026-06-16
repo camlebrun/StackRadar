@@ -41,7 +41,7 @@ def main() -> None:
         logger.warning("EMAIL_FUNCTION_URL not in Secret Manager — email notifications disabled")
         email_function_url = None
 
-    telegram_config: dict | None = None
+    telegram_config: dict[str, object] | None = None
     try:
         tg_token = get_secret(GCP_PROJECT, "TELEGRAM_BOT_TOKEN")
         channels: dict[str, str] = {}

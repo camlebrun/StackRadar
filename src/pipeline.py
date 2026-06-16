@@ -510,7 +510,7 @@ def run_pipeline(
     llm_delay_s: float = 0.0,
     email_function_url: str | None = None,
     use_heuristics: bool = False,
-    telegram_config: dict | None = None,
+    telegram_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     run_start = datetime.now(timezone.utc).isoformat()
     repos = load_repos()
