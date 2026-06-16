@@ -64,7 +64,7 @@ def _format_advisories(advisories: list[dict[str, Any]]) -> str:
         ghsa = _escape_md(str(adv.get("ghsa_id", "")))
         severity = _escape_md(str((adv.get("analysis") or {}).get("severity", "unknown")))
         summary_raw = str((adv.get("analysis") or {}).get("summary", adv.get("summary", "")))
-        summary = _escape_md(summary_raw[:_MAX_SUMMARY_LEN])
+        summary = _escape_md(summary_raw)
         url = _escape_md(str(adv.get("html_url", "")))
         lines.append(f"🔒 *{repo}* \\[{severity}\\]\n{ghsa} — {summary}\n{url}")
 

@@ -9,12 +9,6 @@ from typing import Any
 
 import requests as _http
 
-from src.telegram_notifier import (
-    _escape_md as _tg_escape,
-    notify_advisories,
-    notify_releases,
-    send_notification as _tg_send,
-)
 from src.analyser import (
     analyse_bigquery_release,
     analyse_dbt_package_release,
@@ -45,6 +39,16 @@ from src.store import (
     set_run_status,
     write_digest_json,
     write_repo_advisories,
+)
+from src.telegram_notifier import (
+    _escape_md as _tg_escape,
+)
+from src.telegram_notifier import (
+    notify_advisories,
+    notify_releases,
+)
+from src.telegram_notifier import (
+    send_notification as _tg_send,
 )
 
 logger = logging.getLogger(__name__)

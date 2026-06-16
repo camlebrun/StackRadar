@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.telegram_notifier import (
     _escape_md,
     _format_releases,
@@ -59,7 +57,10 @@ class TestFormatReleases:
         assert "org/my\\.repo" in msg
 
     def test_missing_analysis_graceful(self):
-        record = {"repo": "org/repo", "tag": "v1.0.0", "html_url": "https://x.com", "analysis": None}
+        record = {
+            "repo": "org/repo", "tag": "v1.0.0",
+            "html_url": "https://x.com", "analysis": None,
+        }
         msg = _format_releases([record])
         assert "org/repo" in msg
 
@@ -91,7 +92,10 @@ class TestSendNotification:
 
 class TestNotifyReleases:
     def _record(self):
-        return {"repo": "org/repo", "tag": "v1.0.0", "html_url": "https://x.com", "analysis": {"summary": "Fix."}}
+        return {
+            "repo": "org/repo", "tag": "v1.0.0",
+            "html_url": "https://x.com", "analysis": {"summary": "Fix."},
+        }
 
     def test_empty_records_makes_no_api_call(self):
         with patch("src.telegram_notifier.send_notification") as mock_send:
