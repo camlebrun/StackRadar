@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from src.analyser import filter_trivial_changes
 from src.config import (
     BACKFILL_NON_SEMVER,
     GITHUB_API_BASE,
@@ -17,24 +18,6 @@ from src.config import (
 from src.semver import parse_semver
 
 logger = logging.getLogger(__name__)
-
-_TRIVIAL_CHANGE_PATTERNS = [
-    "update readme",
-    "add contributors",
-    "update contributors",
-    "bump version",
-    "bump changelog",
-    "update changelog",
-    "fix typo",
-    "update docs",
-    "update documentation",
-    "formatting",
-    "linting",
-    "style:",
-    "chore:",
-    "ci:",
-    "whitespace",
-]
 
 _PROD_BREAKING_BUG_PATTERNS = [
     "fix",
@@ -59,11 +42,6 @@ _PROD_BREAKING_BUG_PATTERNS = [
     "incorrect result",
 ]
 
-_BLACKLISTED_SECTIONS = [
-    "migrating from <1.0.0 to >=1.0.0",
-    "migrating from",
-]
-
 
 class GitHubFetchError(Exception):
     def __init__(self, status: int, message: str) -> None:
@@ -77,7 +55,7 @@ def fetch_readme(owner: str, repo: str, token: str | None = None) -> str:
     try:
         resp = requests.get(
             url,
-            headers={**_headers_base(token), "Accept": "application/vnd.github.raw+json"},
+            headers=_github_headers(token, accept="application/vnd.github.raw+json"),
             timeout=GITHUB_TIMEOUT_S,
         )
         if resp.ok:
@@ -85,21 +63,6 @@ def fetch_readme(owner: str, repo: str, token: str | None = None) -> str:
     except Exception as e:
         logger.warning("Could not fetch README for %s/%s: %s", owner, repo, e)
     return ""
-
-
-def filter_trivial_changes(changes: list[str]) -> list[str]:
-    """Remove trivial/cosmetic entries from a key_changes list."""
-    result = []
-    for c in changes:
-        if not isinstance(c, str):
-            continue
-        low = c.lower()
-        if any(p in low for p in _TRIVIAL_CHANGE_PATTERNS):
-            continue
-        if any(low.startswith(section) for section in _BLACKLISTED_SECTIONS):
-            continue
-        result.append(c)
-    return result
 
 
 def heuristic_dbt_analysis(
@@ -170,15 +133,12 @@ def heuristic_dbt_analysis(
     }
 
 
-def _headers_base(token: str | None) -> dict[str, str]:
-    h: dict[str, str] = {"X-GitHub-Api-Version": "2022-11-28"}
-    if token:
-        h["Authorization"] = f"Bearer {token}"
-    return h
-
-
-def _headers(token: str | None) -> dict[str, str]:
-    h = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+def _github_headers(
+    token: str | None,
+    *,
+    accept: str = "application/vnd.github+json",
+) -> dict[str, str]:
+    h: dict[str, str] = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
     if token:
         h["Authorization"] = f"Bearer {token}"
     return h
@@ -186,7 +146,9 @@ def _headers(token: str | None) -> dict[str, str]:
 
 def _get_page(url: str, token: str | None, params: dict[str, int | str]) -> list[dict[str, object]]:
     for attempt in range(GITHUB_RETRY_MAX):
-        resp = requests.get(url, headers=_headers(token), params=params, timeout=GITHUB_TIMEOUT_S)
+        resp = requests.get(
+            url, headers=_github_headers(token), params=params, timeout=GITHUB_TIMEOUT_S
+        )
         if resp.status_code == 429 or resp.status_code >= 500:
             wait = 2**attempt
             logger.warning(
@@ -440,8 +402,11 @@ def fetch_changelog_releases(
     Patch versions (Z > 0), nightly, and beta entries are excluded.
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/CHANGELOG.md"
-    headers = {**_headers_base(token), "Accept": "application/vnd.github.raw+json"}
-    resp = requests.get(url, headers=headers, timeout=GITHUB_TIMEOUT_S)
+    resp = requests.get(
+        url,
+        headers=_github_headers(token, accept="application/vnd.github.raw+json"),
+        timeout=GITHUB_TIMEOUT_S,
+    )
     if not resp.ok:
         raise GitHubFetchError(resp.status_code, resp.text[:200])
 

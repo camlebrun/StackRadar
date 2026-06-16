@@ -93,7 +93,7 @@ _VALID_ANALYSIS = {"action": "upgrade-immediately", "impact": "RCE possible.", "
 
 def test_analyse_returns_parsed_dict() -> None:
     adv = _make_advisory()
-    with patch("src.analyser.call_llm", return_value=json.dumps(_VALID_ANALYSIS)):
+    with patch("src.analyser._call_mistral", return_value=json.dumps(_VALID_ANALYSIS)):
         result = analyse_advisory(adv, "fake-key")
     assert result is not None
     assert result["action"] == "upgrade-immediately"
@@ -101,13 +101,13 @@ def test_analyse_returns_parsed_dict() -> None:
 
 def test_analyse_returns_none_on_invalid_json() -> None:
     adv = _make_advisory()
-    with patch("src.analyser.call_llm", return_value="not json {"):
+    with patch("src.analyser._call_mistral", return_value="not json {"):
         result = analyse_advisory(adv, "fake-key")
     assert result is None
 
 
 def test_analyse_returns_none_on_exception() -> None:
     adv = _make_advisory()
-    with patch("src.analyser.call_llm", side_effect=RuntimeError("network down")):
+    with patch("src.analyser._call_mistral", side_effect=RuntimeError("network down")):
         result = analyse_advisory(adv, "fake-key")
     assert result is None
