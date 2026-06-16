@@ -40,6 +40,16 @@ from src.store import (
     write_digest_json,
     write_repo_advisories,
 )
+from src.telegram_notifier import (
+    _escape_md as _tg_escape,
+)
+from src.telegram_notifier import (
+    notify_advisories,
+    notify_releases,
+)
+from src.telegram_notifier import (
+    send_notification as _tg_send,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -427,9 +437,13 @@ def _process_advisories(
     repos: list[dict[str, str]],
     llm_key: str,
     github_token: str | None,
-) -> None:
-    """Phase 2 — fetch and LLM-analyse security advisories for every repo."""
+) -> list[dict[str, Any]]:
+    """Phase 2 — fetch and LLM-analyse security advisories for every repo.
+
+    Returns newly analysed advisories (not previously known).
+    """
     logger.info("Fetching security advisories...")
+    new_advisories: list[dict[str, Any]] = []
     for repo_cfg in repos:
         repo = repo_cfg["repo"]
         owner, name = repo.split("/", 1)
@@ -453,6 +467,8 @@ def _process_advisories(
                     continue
                 # Fall through to re-analyse if analysis was never stored
             adv["analysis"] = analyse_advisory(adv, llm_key)
+            adv.setdefault("repo", repo)
+            new_advisories.append(adv)
             updated = True
             logger.info("[%s] advisory analysed: %s", repo, ghsa)
 
@@ -462,6 +478,8 @@ def _process_advisories(
             if latest:
                 set_advisory_cursor(s3, bucket, owner, name, latest)
         logger.info("[%s] %d advisories stored", repo, len(all_repo_advisories))
+
+    return new_advisories
 
 
 def _build_and_clean_digest(s3: Any, bucket: str) -> tuple[list[dict[str, Any]], str]:
@@ -492,6 +510,7 @@ def run_pipeline(
     llm_delay_s: float = 0.0,
     email_function_url: str | None = None,
     use_heuristics: bool = False,
+    telegram_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     run_start = datetime.now(timezone.utc).isoformat()
     repos = load_repos()
@@ -503,16 +522,63 @@ def run_pipeline(
         s3, bucket, {"ran_at": datetime.now(timezone.utc).isoformat(), "repos": repo_status}
     )
 
-    _process_advisories(s3, bucket, repos, llm_key, github_token)
+    new_advisories = _process_advisories(s3, bucket, repos, llm_key, github_token)
 
     all_records, _ = _build_and_clean_digest(s3, bucket)
 
+    # ISO8601 sorts lexicographically — valid comparison for UTC timestamps
+    new_records = [r for r in all_records if str(r.get("fetched_at", "")) >= run_start]
+
     if email_function_url:
-        # ISO8601 sorts lexicographically — valid comparison for UTC timestamps
-        new_records = [r for r in all_records if str(r.get("fetched_at", "")) >= run_start]
         if new_records:
             _call_email_function(email_function_url, {"releases": new_records})
             logger.info("Email function called: %d releases", len(new_records))
+
+    if telegram_config:
+        tg_token = telegram_config.get("bot_token", "")
+        channels = telegram_config.get("channels", {})
+
+        if new_records and tg_token:
+            dbt_package_repos = {rc["repo"] for rc in repos if rc.get("type") == "dbt_package"}
+            group_map = {rc["repo"]: rc.get("group", "") for rc in repos}
+
+            by_channel: dict[str, list[dict[str, Any]]] = {
+                "dbt_core": [],
+                "dbt_packages": [],
+                "orchestration": [],
+                "gcp": [],
+            }
+            for r in new_records:
+                repo = r.get("repo", "")
+                if repo in dbt_package_repos:
+                    by_channel["dbt_packages"].append(r)
+                else:
+                    group = group_map.get(repo, "")
+                    if group in ("dbt-core", "dbt-fusion", "dbt-adapters"):
+                        by_channel["dbt_core"].append(r)
+                    elif group == "orchestration":
+                        by_channel["orchestration"].append(r)
+                    elif group in ("bigquery", "lakehouse"):
+                        by_channel["gcp"].append(r)
+
+            for label, records in by_channel.items():
+                if records and label in channels:
+                    notify_releases(tg_token, channels[label], records)
+                    logger.info("Telegram #%s notified: %d releases", label, len(records))
+
+        if new_advisories and tg_token and "security" in channels:
+            notify_advisories(tg_token, channels["security"], new_advisories)
+            logger.info("Telegram security channel notified: %d advisories", len(new_advisories))
+
+        failed_repos = [repo for repo, status in repo_status.items() if not status.get("ok")]
+        if failed_repos and tg_token and "errors" in channels:
+            error_lines = "\n".join(f"• {_tg_escape(r)}" for r in failed_repos)
+            _tg_send(
+                tg_token,
+                channels["errors"],
+                f"*Pipeline errors* for {len(failed_repos)} repo\\(s\\):\n{error_lines}",
+            )
+            logger.info("Telegram errors channel notified: %d failed repos", len(failed_repos))
 
     logger.info("Pipeline complete: %s", repo_status)
     return {"ran_at": run_start, "repos": repo_status}
