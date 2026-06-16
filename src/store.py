@@ -32,6 +32,10 @@ def _cursor_key(owner: str, repo: str) -> str:
 _RUN_STATUS_KEY = "meta/run_status.json"
 
 
+def _advisory_cursor_key(owner: str, repo: str) -> str:
+    return f"meta/advisory-cursor/{owner}/{repo}.json"
+
+
 def _get_json(s3: Any, bucket: str, key: str) -> dict[str, Any] | None:
     try:
         resp = s3.get_object(Bucket=bucket, Key=key)
@@ -103,14 +107,12 @@ def set_cursor(s3: Any, bucket: str, owner: str, repo: str, published_at: str) -
 
 
 def get_advisory_cursor(s3: Any, bucket: str, owner: str, repo: str) -> str | None:
-    key = f"meta/advisory-cursor/{owner}/{repo}.json"
-    data = _get_json(s3, bucket, key)
+    data = _get_json(s3, bucket, _advisory_cursor_key(owner, repo))
     return str(data["updated_at"]) if data else None
 
 
 def set_advisory_cursor(s3: Any, bucket: str, owner: str, repo: str, updated_at: str) -> None:
-    key = f"meta/advisory-cursor/{owner}/{repo}.json"
-    _put_json(s3, bucket, key, {"updated_at": updated_at})
+    _put_json(s3, bucket, _advisory_cursor_key(owner, repo), {"updated_at": updated_at})
 
 
 def get_run_status(s3: Any, bucket: str) -> dict[str, Any] | None:

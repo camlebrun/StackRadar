@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from src.config import GCP_PROJECT, R2_BUCKET
+from src.config import GCP_PROJECT, R2_BUCKET, TelegramConfig
 from src.pipeline import run_pipeline
 from src.secrets import get_secret
 from src.store import get_s3_client
@@ -41,7 +41,7 @@ def main() -> None:
         logger.warning("EMAIL_FUNCTION_URL not in Secret Manager — email notifications disabled")
         email_function_url = None
 
-    telegram_config: dict[str, object] | None = None
+    telegram_config: TelegramConfig | None = None
     try:
         tg_token = get_secret(GCP_PROJECT, "TELEGRAM_BOT_TOKEN")
         channels: dict[str, str] = {}
@@ -57,7 +57,7 @@ def main() -> None:
                 channels[label] = get_secret(GCP_PROJECT, key)
             except Exception:
                 logger.warning("%s not in Secret Manager — skipping that channel", key)
-        telegram_config = {"bot_token": tg_token, "channels": channels}
+        telegram_config = TelegramConfig(bot_token=tg_token, channels=channels)
     except Exception:
         logger.warning("TELEGRAM_BOT_TOKEN not in Secret Manager — Telegram notifications disabled")
 

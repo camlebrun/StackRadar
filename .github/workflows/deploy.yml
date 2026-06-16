@@ -9,8 +9,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      email_function: ${{ steps.filter.outputs.email_function }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            email_function:
+              - 'functions/email/**'
+
   deploy-email-function:
     name: Deploy Cloud Function (email-digest)
+    needs: changes
+    if: needs.changes.outputs.email_function == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

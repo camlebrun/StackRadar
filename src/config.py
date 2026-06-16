@@ -1,3 +1,13 @@
+from __future__ import annotations
+
+from typing import TypedDict
+
+
+class TelegramConfig(TypedDict):
+    bot_token: str
+    channels: dict[str, str]
+
+
 GCP_PROJECT = "git-release-496817"
 GCP_REGION = "europe-west9"
 

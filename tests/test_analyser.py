@@ -2,12 +2,12 @@ import json
 from unittest.mock import MagicMock, patch
 
 from src.analyser import (
+    _call_mistral,
     analyse_bigquery_release,
     analyse_fusion_historical,
     analyse_fusion_release,
     analyse_lakehouse_release,
     analyse_release,
-    call_llm,
 )
 
 _VALID_ANALYSIS = {
@@ -70,11 +70,11 @@ def test_exception_returns_none() -> None:
     assert "timeout" in (error or "")
 
 
-def test_call_llm_returns_string() -> None:
+def test_call_mistral_returns_string() -> None:
     client = MagicMock()
     client.chat.complete.return_value.choices[0].message.content = '{"ok": true}'
     with patch("src.analyser.Mistral", return_value=client):
-        result = call_llm("some prompt", "fake-key")
+        result = _call_mistral("some prompt", "fake-key")
     assert result == '{"ok": true}'
 
 

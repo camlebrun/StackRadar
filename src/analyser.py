@@ -16,6 +16,44 @@ from src.prompts.release_analysis import RELEASE_ANALYSIS_PROMPT
 
 logger = logging.getLogger(__name__)
 
+_TRIVIAL_CHANGE_PATTERNS = [
+    "update readme",
+    "add contributors",
+    "update contributors",
+    "bump version",
+    "bump changelog",
+    "update changelog",
+    "fix typo",
+    "update docs",
+    "update documentation",
+    "formatting",
+    "linting",
+    "style:",
+    "chore:",
+    "ci:",
+    "whitespace",
+]
+
+_BLACKLISTED_SECTIONS = [
+    "migrating from <1.0.0 to >=1.0.0",
+    "migrating from",
+]
+
+
+def filter_trivial_changes(changes: list[str]) -> list[str]:
+    """Remove trivial/cosmetic entries from a key_changes list."""
+    result = []
+    for c in changes:
+        if not isinstance(c, str):
+            continue
+        low = c.lower()
+        if any(p in low for p in _TRIVIAL_CHANGE_PATTERNS):
+            continue
+        if any(low.startswith(section) for section in _BLACKLISTED_SECTIONS):
+            continue
+        result.append(c)
+    return result
+
 
 class DbtPackageAnalysisResult(BaseModel):
     purpose: str
@@ -79,9 +117,22 @@ def _call_mistral(prompt: str, api_key: str) -> str:
     return str(msg.content) if msg and msg.content else ""
 
 
-def call_llm(prompt: str, api_key: str) -> str:
-    """Public entry point — calls the configured LLM and returns a raw JSON string."""
-    return _call_mistral(prompt, api_key)
+def _analyse_with_model(
+    prompt: str,
+    api_key: str,
+    model_cls: type[BaseModel],
+    context: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        data = json.loads(_call_mistral(prompt, api_key))
+        result = model_cls.model_validate(data)
+        return result.model_dump(), None
+    except ValidationError as e:
+        logger.error("LLM response failed validation for %s: %s", context, e)
+        return None, str(e)
+    except Exception as e:
+        logger.error("LLM call failed for %s: %s", context, e)
+        return None, str(e)
 
 
 def analyse_release(
@@ -92,18 +143,8 @@ def analyse_release(
     tag = str(release.get("tag_name", ""))
     name = str(release.get("name", tag))
     body = str(release.get("body", ""))[:4000]
-
     prompt = RELEASE_ANALYSIS_PROMPT.format(repo=repo, tag=tag, name=name, body=body)
-    try:
-        data = json.loads(_call_mistral(prompt, api_key))
-        result = AnalysisResult(**data)
-        return result.model_dump(), None
-    except ValidationError as e:
-        logger.error("LLM response failed validation for %s@%s: %s", repo, tag, e)
-        return None, str(e)
-    except Exception as e:
-        logger.error("LLM call failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
+    return _analyse_with_model(prompt, api_key, AnalysisResult, f"{repo}@{tag}")
 
 
 def analyse_dbt_package_release(
@@ -118,7 +159,7 @@ def analyse_dbt_package_release(
     stale=True: no release in >1 year — skip LLM, return README summary only.
     use_heuristics=True: rule-based analysis, no LLM call (for testing).
     """
-    from src.fetcher import filter_trivial_changes, heuristic_dbt_analysis
+    from src.fetcher import heuristic_dbt_analysis
 
     repo = str(release.get("repo", ""))
     tag = str(release.get("tag_name", ""))
@@ -150,18 +191,13 @@ def analyse_dbt_package_release(
     prompt = DBT_PACKAGE_ANALYSIS_PROMPT.format(
         repo=repo, tag=tag, name=name, readme=readme[:2000], body=body
     )
-    try:
-        data = json.loads(_call_mistral(prompt, api_key))
-        raw_kc = data.get("key_changes", [])
-        data["key_changes"] = filter_trivial_changes(raw_kc if isinstance(raw_kc, list) else [])
-        result_obj = DbtPackageAnalysisResult(**data)
-        return result_obj.model_dump(), None
-    except ValidationError as e:
-        logger.error("LLM dbt validation failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
-    except Exception as e:
-        logger.error("LLM dbt call failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
+    analysis, error = _analyse_with_model(
+        prompt, api_key, DbtPackageAnalysisResult, f"{repo}@{tag}"
+    )
+    if analysis is not None:
+        raw_kc = analysis.get("key_changes", [])
+        analysis["key_changes"] = filter_trivial_changes(raw_kc if isinstance(raw_kc, list) else [])
+    return analysis, error
 
 
 def analyse_fusion_release(
@@ -172,18 +208,8 @@ def analyse_fusion_release(
     repo = str(release.get("repo", ""))
     tag = str(release.get("tag_name", ""))
     body = str(release.get("body", ""))[:5000]
-
     prompt = FUSION_RELEASE_ANALYSIS_PROMPT.format(repo=repo, tag=tag, body=body)
-    try:
-        data = json.loads(_call_mistral(prompt, api_key))
-        result = AnalysisResult(**data)
-        return result.model_dump(), None
-    except ValidationError as e:
-        logger.error("Fusion LLM validation failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
-    except Exception as e:
-        logger.error("Fusion LLM call failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
+    return _analyse_with_model(prompt, api_key, AnalysisResult, f"{repo}@{tag}")
 
 
 def analyse_lakehouse_release(
@@ -194,18 +220,8 @@ def analyse_lakehouse_release(
     tag = str(release.get("tag_name", ""))
     name = str(release.get("name", tag))
     body = str(release.get("body", ""))[:5000]
-
     prompt = LAKEHOUSE_RELEASE_ANALYSIS_PROMPT.format(tag=tag, name=name, body=body)
-    try:
-        data = json.loads(_call_mistral(prompt, api_key))
-        result = BigQueryAnalysisResult.model_validate(data)
-        return result.model_dump(), None
-    except ValidationError as e:
-        logger.error("Lakehouse LLM validation failed for %s: %s", tag, e)
-        return None, str(e)
-    except Exception as e:
-        logger.error("Lakehouse LLM call failed for %s: %s", tag, e)
-        return None, str(e)
+    return _analyse_with_model(prompt, api_key, BigQueryAnalysisResult, tag)
 
 
 def analyse_bigquery_release(
@@ -216,18 +232,8 @@ def analyse_bigquery_release(
     tag = str(release.get("tag_name", ""))
     name = str(release.get("name", tag))
     body = str(release.get("body", ""))[:5000]
-
     prompt = BIGQUERY_RELEASE_ANALYSIS_PROMPT.format(tag=tag, name=name, body=body)
-    try:
-        data = json.loads(_call_mistral(prompt, api_key))
-        result = BigQueryAnalysisResult.model_validate(data)
-        return result.model_dump(), None
-    except ValidationError as e:
-        logger.error("BigQuery LLM validation failed for %s: %s", tag, e)
-        return None, str(e)
-    except Exception as e:
-        logger.error("BigQuery LLM call failed for %s: %s", tag, e)
-        return None, str(e)
+    return _analyse_with_model(prompt, api_key, BigQueryAnalysisResult, tag)
 
 
 def analyse_fusion_historical(
@@ -240,7 +246,6 @@ def analyse_fusion_historical(
     meta = release.get("_historical_meta", {})
     if not isinstance(meta, dict):
         meta = {}
-
     prompt = FUSION_HISTORICAL_PROMPT.format(
         version_count=meta.get("version_count", "?"),
         first_version=meta.get("first_version", ""),
@@ -248,13 +253,4 @@ def analyse_fusion_historical(
         version_list=meta.get("version_list", ""),
         body_sample=str(release.get("body", ""))[:4000],
     )
-    try:
-        data = json.loads(_call_mistral(prompt, api_key))
-        result = AnalysisResult(**data)
-        return result.model_dump(), None
-    except ValidationError as e:
-        logger.error("Fusion historical LLM validation failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
-    except Exception as e:
-        logger.error("Fusion historical LLM call failed for %s@%s: %s", repo, tag, e)
-        return None, str(e)
+    return _analyse_with_model(prompt, api_key, AnalysisResult, f"{repo}@{tag}")

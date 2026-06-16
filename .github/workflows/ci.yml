@@ -7,8 +7,34 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'src/**'
+              - 'tests/**'
+              - 'functions/**'
+              - 'requirements*.txt'
+              - 'Dockerfile'
+              - 'pyproject.toml'
+            frontend:
+              - 'public/**'
+              - 'vite.config.js'
+              - 'package*.json'
+
   python:
     name: Python tests & lint
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +54,8 @@ jobs:
 
   frontend:
     name: Frontend build
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

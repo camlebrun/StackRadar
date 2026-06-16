@@ -7,6 +7,7 @@ from typing import Any, cast
 import requests
 
 from src.config import GITHUB_API_BASE, GITHUB_TIMEOUT_S
+from src.fetcher import _github_headers
 
 logger = logging.getLogger(__name__)
 
@@ -15,18 +16,11 @@ _SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 def fetch_advisories(owner: str, repo: str, token: str | None = None) -> list[dict[str, Any]]:
     """Fetch published security advisories for a repo via GitHub API."""
-    headers: dict[str, str] = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     advisories: list[dict[str, Any]] = []
     try:
         resp = requests.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/security-advisories",
-            headers=headers,
+            headers=_github_headers(token),
             params={"per_page": "100", "state": "published"},
             timeout=GITHUB_TIMEOUT_S,
         )
@@ -66,7 +60,7 @@ def analyse_advisory(advisory: dict[str, Any], api_key: str) -> dict[str, Any] |
     """Run LLM analysis on an advisory. Returns analysis dict or None on failure."""
     from datetime import datetime, timezone
 
-    from src.analyser import call_llm
+    from src.analyser import _call_mistral
     from src.prompts.advisory_analysis import ADVISORY_ANALYSIS_PROMPT
 
     prompt = ADVISORY_ANALYSIS_PROMPT.format(
@@ -81,7 +75,7 @@ def analyse_advisory(advisory: dict[str, Any], api_key: str) -> dict[str, Any] |
         today=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
     )
     try:
-        raw = call_llm(prompt, api_key)
+        raw = _call_mistral(prompt, api_key)
         return cast(dict[str, Any], json.loads(raw))
     except Exception as e:
         logger.error("Advisory analysis failed for %s: %s", advisory.get("ghsa_id"), e)
