@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from mistralai.client.models import UserMessageTypedDict
 
@@ -321,7 +321,6 @@ def test_filter_trivial_changes_keeps_all_meaningful() -> None:
 
 
 def test_filter_trivial_changes_ignores_non_strings() -> None:
-    changes: list[str] = []  # type: ignore[assignment]
     mixed: list[object] = ["Valid change", 42, None, {"key": "value"}]
     result = filter_trivial_changes(mixed)  # type: ignore[arg-type]
     assert result == ["Valid change"]
