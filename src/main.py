@@ -41,6 +41,26 @@ def main() -> None:
         logger.warning("EMAIL_FUNCTION_URL not in Secret Manager — email notifications disabled")
         email_function_url = None
 
+    telegram_config: dict | None = None
+    try:
+        tg_token = get_secret(GCP_PROJECT, "TELEGRAM_BOT_TOKEN")
+        channels: dict[str, str] = {}
+        for key, label in [
+            ("TELEGRAM_CHANNEL_DBT_CORE", "dbt_core"),
+            ("TELEGRAM_CHANNEL_DBT_PACKAGES", "dbt_packages"),
+            ("TELEGRAM_CHANNEL_ORCHESTRATION", "orchestration"),
+            ("TELEGRAM_CHANNEL_GCP", "gcp"),
+            ("TELEGRAM_CHANNEL_ERRORS", "errors"),
+            ("TELEGRAM_CHANNEL_SECURITY", "security"),
+        ]:
+            try:
+                channels[label] = get_secret(GCP_PROJECT, key)
+            except Exception:
+                logger.warning("%s not in Secret Manager — skipping that channel", key)
+        telegram_config = {"bot_token": tg_token, "channels": channels}
+    except Exception:
+        logger.warning("TELEGRAM_BOT_TOKEN not in Secret Manager — Telegram notifications disabled")
+
     result = run_pipeline(
         s3,
         R2_BUCKET,
@@ -48,6 +68,7 @@ def main() -> None:
         github_token,
         llm_delay_s=1.2,
         email_function_url=email_function_url,
+        telegram_config=telegram_config,
     )
 
     failed = [repo for repo, status in result["repos"].items() if not status["ok"]]
