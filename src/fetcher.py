@@ -341,7 +341,7 @@ def fetch_gcp_docs_releases(
             continue
 
         tag = dt.strftime("%Y-%m-%d")
-        anchor = dt.strftime("%B-%d-%Y").lower()
+        anchor = dt.strftime("%B_%d_%Y")
 
         releases.append(
             {

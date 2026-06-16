@@ -362,7 +362,7 @@ def test_gcp_docs_record_fields() -> None:
     r = next(r for r in result if r["tag_name"] == "2026-05-20")
     assert r["name"] == "BigQuery — May 20, 2026"
     assert "Python UDFs" in str(r["body"])
-    assert "may-20-2026" in str(r["html_url"])
+    assert "May_20_2026" in str(r["html_url"])
     assert r["prerelease"] is False
 
 
@@ -377,6 +377,19 @@ def test_gcp_docs_raises_on_http_error() -> None:
                 display_name="BigQuery",
                 docs_base_url="https://example.com/release-notes",
             )
+
+
+def test_gcp_docs_anchor_format_titlecase_underscore() -> None:
+    docs = "## October 01, 2026\n\nFeature something new."
+    with patch("src.fetcher.requests.get", return_value=_make_text_resp(docs)):
+        result = fetch_gcp_docs_releases(
+            url="https://example.com/release-notes.md.txt",
+            display_name="BigQuery",
+            docs_base_url="https://example.com/release-notes",
+        )
+    assert len(result) == 1
+    assert "October_01_2026" in str(result[0]["html_url"])
+    assert "october" not in str(result[0]["html_url"])
 
 
 def test_gcp_docs_skips_sections_without_body() -> None:
