@@ -12,7 +12,7 @@ StackRadar fetches GitHub release notes across your tracked repos, analyses them
 
 - **Fetches** new releases incrementally (cursor-based, no duplicate processing)
 - **Analyses** each release with `mistral-small-latest` via Mistral: summary, key changes, severity, CVE IDs, tags
-- **Enriches** CVE IDs with CVSS scores from NIST NVD
+- **Analyses** security advisories with an LLM: impact, affected versions, fix version, and a patch-now/patch-soon/monitor/safe action
 - **Stores** one JSON blob per release in Cloudflare R2
 - **Serves** a `/digest` API consumed by a static bento frontend on Cloudflare Pages
 
@@ -39,11 +39,10 @@ StackRadar fetches GitHub release notes across your tracked repos, analyses them
  │  For each new release / advisory:                               │
  │  ├── LLM analysis  ─────────────────────►  Mistral API          │
  │  │   mistral-small-latest                                        │
- │  │   6 specialised prompts:                                      │
- │  │     standard · bigquery · lakehouse                          │
- │  │     dbt-package · dbt-fusion · dbt-fusion-historical         │
- │  ├── CVE enrichment ────────────────────►  NIST NVD API         │
- │  │   CVSS scores appended to cve_references[]                   │
+ │  │   specialised prompts:                                        │
+ │  │     standard · bigquery · lakehouse · dbt-package             │
+ │  ├── Security advisories ───────────────►  GitHub Advisories API │
+ │  │   LLM triage: impact, fix version, action (patch-now/soon/…) │
  │  └── Cloudflare R2  (boto3, S3-compatible)                      │
  │       releases/{owner}/{repo}/{tag}.json                        │
  │       meta/cursor/{owner}/{repo}.json                           │
@@ -167,7 +166,7 @@ In production, these are stored in **GCP Secret Manager** and never in env files
 ## Frontend
 
 - **Digest tab** — bento grid of release cards: severity badge, LLM summary, key changes, CVE chips
-- **CVE tab** — aggregated CVE table across all releases, sorted by severity + CVSS score, linked to NVD
+- **Security tab** — aggregated advisories table, sorted by severity, with LLM-derived action (patch-now/patch-soon/monitor/safe)
 - Live search filters both tabs simultaneously
 - Dark mode, responsive (mobile → desktop)
 

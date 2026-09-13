@@ -251,26 +251,26 @@ async function loadDigest() {
     loading.classList.add('hidden');
     const nonPkg = allRecords.filter(r =>
       r.group !== 'dbt-packages' &&
-      r.group !== 'dbt-fusion' &&
-      r.repo !== 'dbt-labs/dbt-fusion' &&
       r.group !== 'bigquery' &&
       r.repo !== 'google/bigquery' &&
       r.group !== 'lakehouse' &&
-      r.repo !== 'google/lakehouse'
+      r.repo !== 'google/lakehouse' &&
+      r.group !== 'scaleway' &&
+      r.repo !== 'scaleway/changelog'
     );
-    const pkgRecs    = allRecords.filter(r => r.group === 'dbt-packages');
-    const fusionRecs = allRecords.filter(r => r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion');
-    const bqRecs     = allRecords.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
-    const lhRecs     = allRecords.filter(r => r.group === 'lakehouse' || r.repo === 'google/lakehouse');
+    const pkgRecs = allRecords.filter(r => r.group === 'dbt-packages');
+    const bqRecs  = allRecords.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
+    const lhRecs  = allRecords.filter(r => r.group === 'lakehouse' || r.repo === 'google/lakehouse');
+    const scwRecs = allRecords.filter(r => r.group === 'scaleway' || r.repo === 'scaleway/changelog');
     renderGrid(nonPkg);
-    updateCounts(nonPkg, allAdvisories, pkgRecs, fusionRecs, bqRecs, lhRecs);
+    updateCounts(nonPkg, allAdvisories, pkgRecs, bqRecs, lhRecs, scwRecs);
   } catch (err) {
     loading.className = 'empty-state';
     loading.textContent = `⚠ Failed to load: ${err.message}`;
   }
 }
 
-function updateCounts(records, advisories, pkgRecs, fusionRecs, bqRecs = [], lhRecs = []) {
+function updateCounts(records, advisories, pkgRecs, bqRecs = [], lhRecs = [], scwRecs = []) {
   document.getElementById('digest-count').textContent = records.length || '';
   document.getElementById('advisory-count').textContent = advisories.length || '';
   const pkgBadge = document.getElementById('pkg-count');
@@ -278,14 +278,6 @@ function updateCounts(records, advisories, pkgRecs, fusionRecs, bqRecs = [], lhR
     const pkgUnique = new Set(pkgRecs.map(r => r.repo)).size;
     pkgBadge.textContent = pkgUnique || '';
     pkgBadge.title = `${pkgUnique} packages tracked · latest release per package`;
-  }
-  const fusionBadge = document.getElementById('fusion-count');
-  if (fusionBadge) {
-    const fusionLatest = fusionRecs.length
-      ? [fusionRecs.reduce((best, r) => new Date(r.published_at) > new Date(best.published_at) ? r : best)]
-      : [];
-    fusionBadge.textContent = fusionLatest.length || '';
-    fusionBadge.title = `${fusionLatest.length} latest release · ${fusionRecs.length} total in history`;
   }
   const bqBadge = document.getElementById('bq-count');
   if (bqBadge) {
@@ -296,6 +288,11 @@ function updateCounts(records, advisories, pkgRecs, fusionRecs, bqRecs = [], lhR
   if (lhBadge) {
     lhBadge.textContent = lhRecs.length || '';
     lhBadge.title = `${lhRecs.length} release windows tracked`;
+  }
+  const scwBadge = document.getElementById('scw-count');
+  if (scwBadge) {
+    scwBadge.textContent = scwRecs.length || '';
+    scwBadge.title = `${scwRecs.length} items tracked`;
   }
 }
 

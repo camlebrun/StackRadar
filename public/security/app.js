@@ -62,22 +62,13 @@ async function loadAdvisories() {
     loading.classList.add('hidden');
     document.getElementById('total-count').textContent   = allAdvisories.length || '';
     const releases = Array.isArray(data) ? data : (data.releases ?? []);
-    const nonPkg = releases.filter(r => r.group !== 'dbt-packages' && r.group !== 'dbt-fusion' && r.repo !== 'dbt-labs/dbt-fusion');
+    const nonPkg = releases.filter(r => r.group !== 'dbt-packages');
     document.getElementById('release-count').textContent = nonPkg.length || '';
     const pkgBadge = document.getElementById('pkg-count');
     if (pkgBadge) {
       const pkgUnique = new Set(releases.filter(r => r.group === 'dbt-packages').map(r => r.repo)).size;
       pkgBadge.textContent = pkgUnique || '';
       pkgBadge.title = `${pkgUnique} packages tracked · latest release per package`;
-    }
-    const fusionBadge = document.getElementById('fusion-count');
-    if (fusionBadge) {
-      const fusionRecs  = releases.filter(r => r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion');
-      const fusionLatest = fusionRecs.length
-        ? [fusionRecs.reduce((best, r) => new Date(r.published_at) > new Date(best.published_at) ? r : best)]
-        : [];
-      fusionBadge.textContent = fusionLatest.length || '';
-      fusionBadge.title = `${fusionLatest.length} latest release · ${fusionRecs.length} total in history`;
     }
     buildRepoFilters(allAdvisories);
     renderAll();

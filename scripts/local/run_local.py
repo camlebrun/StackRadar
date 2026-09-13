@@ -38,12 +38,11 @@ s3 = get_s3_client(
 github_token = get_secret(GCP_PROJECT, "GITHUB_TOKEN")
 
 llm_key = get_secret(GCP_PROJECT, "MISTRAL_API_KEY")
-llm_provider = "mistral"
 llm_delay_s = 1.2  # free tier ~1 req/s
 print("Provider: Mistral mistral-small-latest (free tier)\n")
 
 print("🚀 Starting pipeline...\n")
-result = run_pipeline(s3, R2_BUCKET, llm_key, github_token, llm_provider, llm_delay_s)
+result = run_pipeline(s3, R2_BUCKET, llm_key, github_token, llm_delay_s)
 
 print("\n✅ Done:")
 for repo, status in result["repos"].items():

@@ -3,17 +3,13 @@
 const R2_BASE = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev';
 const MANIFEST_URL = `${R2_BASE}/manifest.json`;
 
-const _VALID_SEV = new Set(['critical', 'high', 'medium', 'low', 'none', 'unknown']);
-function safeSev(s) { return _VALID_SEV.has(s) ? s : 'none'; }
-
 let allReleases = [];
-let activeTag = 'all';
-let latestOnly = true;
+const activeProducts = new Set();
+const activeCategories = new Set();
 
 document.addEventListener('DOMContentLoaded', () => {
   setupDrawer();
   setupSearch();
-  setupLatestSelect();
   loadReleases();
 });
 
@@ -28,12 +24,13 @@ async function loadReleases() {
     const data = await resp.json();
     const records = Array.isArray(data) ? data : (data.releases ?? []);
     allReleases = records.filter(r =>
-      r.group === 'dbt-fusion' || r.repo === 'dbt-labs/dbt-fusion'
+      r.group === 'scaleway' || r.repo === 'scaleway/changelog'
     );
     const advisories = Array.isArray(data) ? [] : (data.advisories ?? []);
     loading.classList.add('hidden');
     setCrossTabCounts(records, advisories);
-    buildTagFilters(allReleases);
+    buildFacetChips('product-chips', activeProducts, r => r.product);
+    buildFacetChips('category-chips', activeCategories, r => r.category);
     render();
   } catch (err) {
     loading.className = 'empty-state';
@@ -45,20 +42,17 @@ function setCrossTabCounts(releases, advisories) {
   const el = id => document.getElementById(id);
   const nonPkg = releases.filter(r =>
     r.group !== 'dbt-packages' &&
-    r.group !== 'dbt-fusion' &&
-    r.repo !== 'dbt-labs/dbt-fusion' &&
     r.group !== 'bigquery' &&
     r.repo !== 'google/bigquery' &&
     r.group !== 'lakehouse' &&
-    r.repo !== 'google/lakehouse'
+    r.repo !== 'google/lakehouse' &&
+    r.group !== 'scaleway' &&
+    r.repo !== 'scaleway/changelog'
   );
   if (el('release-count'))  el('release-count').textContent  = nonPkg.length || '';
   if (el('advisory-count')) el('advisory-count').textContent = advisories.length || '';
   const pkgUnique = new Set(releases.filter(r => r.group === 'dbt-packages').map(r => r.repo)).size;
-  if (el('pkg-count')) {
-    el('pkg-count').textContent = pkgUnique || '';
-    el('pkg-count').title = `${pkgUnique} packages tracked · latest release per package`;
-  }
+  if (el('pkg-count')) el('pkg-count').textContent = pkgUnique || '';
   const bqRecs = releases.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
   if (el('bq-count')) {
     el('bq-count').textContent = bqRecs.length || '';
@@ -69,32 +63,44 @@ function setCrossTabCounts(releases, advisories) {
     el('lh-count').textContent = lhRecs.length || '';
     el('lh-count').title = `${lhRecs.length} release windows tracked`;
   }
+  const scwRecs = releases.filter(r => r.group === 'scaleway' || r.repo === 'scaleway/changelog');
+  if (el('scw-count')) {
+    el('scw-count').textContent = scwRecs.length || '';
+    el('scw-count').title = `${scwRecs.length} items tracked`;
+  }
 }
 
-function buildTagFilters(releases) {
-  const tagCounts = {};
-  releases.forEach(r => {
-    (r.analysis?.tags ?? []).forEach(t => {
-      tagCounts[t] = (tagCounts[t] ?? 0) + 1;
+function buildFacetChips(containerId, activeSet, getValue) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const counts = {};
+  allReleases.forEach(r => {
+    const v = getValue(r);
+    if (v) counts[v] = (counts[v] ?? 0) + 1;
+  });
+  const values = Object.keys(counts).sort();
+  if (!values.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = values.map(v =>
+    `<button type="button" class="chip" data-value="${esc(v)}">${esc(v)} <span class="chip-count">${counts[v]}</span></button>`
+  ).join('');
+
+  container.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.value;
+      if (activeSet.has(v)) {
+        activeSet.delete(v);
+        btn.classList.remove('active');
+      } else {
+        activeSet.add(v);
+        btn.classList.add('active');
+      }
+      render();
     });
-  });
-
-  const tags = Object.keys(tagCounts).sort();
-  if (!tags.length) return;
-
-  const select = document.getElementById('tag-select');
-  select.innerHTML = `<option value="all">All tags</option>` +
-    tags.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
-  select.addEventListener('change', e => {
-    activeTag = e.target.value;
-    render();
-  });
-}
-
-function setupLatestSelect() {
-  document.getElementById('latest-select').addEventListener('change', e => {
-    latestOnly = e.target.value === 'latest';
-    render();
   });
 }
 
@@ -102,38 +108,31 @@ function setupSearch() {
   document.getElementById('search').addEventListener('input', render);
 }
 
-function getLatest(releases) {
-  if (!releases.length) return [];
-  return [releases.reduce((best, r) =>
-    new Date(r.published_at) > new Date(best.published_at) ? r : best
-  )];
-}
-
 function render() {
   const q = document.getElementById('search').value.trim().toLowerCase();
 
-  let filtered = latestOnly ? getLatest(allReleases) : [...allReleases];
+  let filtered = [...allReleases];
   filtered.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
 
-  if (activeTag !== 'all') {
-    filtered = filtered.filter(r => (r.analysis?.tags ?? []).includes(activeTag));
+  if (activeProducts.size) {
+    filtered = filtered.filter(r => activeProducts.has(r.product));
   }
-
+  if (activeCategories.size) {
+    filtered = filtered.filter(r => activeCategories.has(r.category));
+  }
   if (q) {
     filtered = filtered.filter(r =>
       (r.name || r.tag || '').toLowerCase().includes(q) ||
       (r.analysis?.summary ?? '').toLowerCase().includes(q) ||
-      (r.analysis?.tags ?? []).join(' ').toLowerCase().includes(q) ||
-      (r.analysis?.key_changes ?? []).join(' ').toLowerCase().includes(q)
+      (r.analysis?.tags ?? []).join(' ').toLowerCase().includes(q)
     );
   }
 
-
-  const countEl = document.getElementById('fusion-count');
+  const countEl = document.getElementById('scw-count');
   if (countEl) countEl.textContent = filtered.length || '';
 
-  const grid = document.getElementById('fusion-grid');
-  const empty = document.getElementById('empty-fusion');
+  const grid  = document.getElementById('scw-grid');
+  const empty = document.getElementById('empty-scw');
 
   if (!filtered.length) {
     grid.innerHTML = '';
@@ -144,22 +143,16 @@ function render() {
 
   grid.innerHTML = filtered.map((r, idx) => {
     const a        = r.analysis ?? {};
-    const severity = a.severity ?? 'none';
     const tags     = a.tags ?? [];
-    const changes  = (a.key_changes ?? []).slice(0, 3);
-
-    const changesList = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
-    const tagChips    = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    const tagChips = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
 
     return `<article class="card" data-idx="${idx}">
   <div class="card-header">
-    <span class="card-repo">dbt-fusion</span>
-    <span class="sev sev-${safeSev(severity)}">${esc(severity)}</span>
+    <span class="card-repo">Scaleway</span>
   </div>
   <h3 class="card-title">${esc(r.name || r.tag)}</h3>
   <p class="card-date">${formatDate(r.published_at)}</p>
   <p class="card-summary">${renderInline(a.summary ?? '')}</p>
-  ${changesList ? `<ul class="card-changes">${changesList}</ul>` : ''}
   <div class="card-footer">
     ${tagChips ? `<div class="tags">${tagChips}</div>` : '<div></div>'}
     <span class="card-cta">Details <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -193,14 +186,9 @@ function setupDrawer() {
 }
 
 function openDrawer(record) {
-  const a   = record.analysis ?? {};
-  const sev = a.severity ?? 'none';
+  const a = record.analysis ?? {};
 
-  document.getElementById('drawer-repo').textContent = 'dbt-fusion';
-  const sevEl = document.getElementById('drawer-sev');
-  sevEl.textContent = sev;
-  sevEl.className = `sev sev-${safeSev(sev)}`;
-
+  document.getElementById('drawer-repo').textContent = 'Scaleway';
   document.getElementById('drawer-title').textContent = record.name || record.tag;
   document.getElementById('drawer-date').textContent  = formatDate(record.published_at);
   document.getElementById('drawer-summary').innerHTML = renderInline(a.summary ?? '');
@@ -215,6 +203,16 @@ function openDrawer(record) {
     changesWrap.classList.add('hidden');
   }
 
+  const breakingWrap = document.getElementById('drawer-breaking-wrap');
+  const breakingList = document.getElementById('drawer-breaking');
+  const breaking = a.breaking_changes ?? [];
+  if (breaking.length) {
+    breakingList.innerHTML = breaking.map(c => `<li>${renderInline(c)}</li>`).join('');
+    breakingWrap.classList.remove('hidden');
+  } else {
+    breakingWrap.classList.add('hidden');
+  }
+
   const tagsWrap = document.getElementById('drawer-tags-wrap');
   const tagsEl   = document.getElementById('drawer-tags');
   const tags = a.tags ?? [];
@@ -223,18 +221,6 @@ function openDrawer(record) {
     tagsWrap.classList.remove('hidden');
   } else {
     tagsWrap.classList.add('hidden');
-  }
-
-  const cveWrap = document.getElementById('drawer-cve-wrap');
-  const cvesEl  = document.getElementById('drawer-cves');
-  const cveRefs = a.cve_references ?? [];
-  if (cveRefs.length) {
-    cvesEl.innerHTML = cveRefs.map(id =>
-      `<a class="drawer-cve-chip" href="https://nvd.nist.gov/vuln/detail/${esc(id)}" target="_blank" rel="noopener">${esc(id)}</a>`
-    ).join('');
-    cveWrap.classList.remove('hidden');
-  } else {
-    cveWrap.classList.add('hidden');
   }
 
   document.getElementById('drawer-link').href = record.html_url ?? '#';

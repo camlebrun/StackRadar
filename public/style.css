@@ -228,6 +228,27 @@ header h1 {
   color: #8b5cf6;
 }
 
+.chip-count {
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Filter facet (multi-select chip group) ── */
+.filter-facet {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.filter-facet-label {
+  flex-shrink: 0;
+  padding-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #71717a;
+}
+
 /* ── Tag select ── */
 .tag-select {
   padding: 4px 10px;
