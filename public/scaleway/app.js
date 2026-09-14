@@ -29,7 +29,7 @@ async function loadReleases() {
     const advisories = Array.isArray(data) ? [] : (data.advisories ?? []);
     loading.classList.add('hidden');
     setCrossTabCounts(records, advisories);
-    buildFacetChips('product-chips', activeProducts, r => r.product);
+    buildFacetDropdown('product', activeProducts, r => r.product);
     buildFacetChips('category-chips', activeCategories, r => r.category);
     render();
   } catch (err) {
@@ -70,6 +70,8 @@ function setCrossTabCounts(releases, advisories) {
   }
 }
 
+const FACET_DEFAULT_VISIBLE = 8;
+
 function buildFacetChips(containerId, activeSet, getValue) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -79,29 +81,114 @@ function buildFacetChips(containerId, activeSet, getValue) {
     const v = getValue(r);
     if (v) counts[v] = (counts[v] ?? 0) + 1;
   });
-  const values = Object.keys(counts).sort();
+  const values = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
   if (!values.length) {
     container.innerHTML = '';
     return;
   }
 
-  container.innerHTML = values.map(v =>
-    `<button type="button" class="chip" data-value="${esc(v)}">${esc(v)} <span class="chip-count">${counts[v]}</span></button>`
-  ).join('');
+  let expanded = false;
 
-  container.querySelectorAll('.chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const v = btn.dataset.value;
-      if (activeSet.has(v)) {
-        activeSet.delete(v);
-        btn.classList.remove('active');
-      } else {
-        activeSet.add(v);
-        btn.classList.add('active');
-      }
+  function renderChips() {
+    const visible = expanded ? values : values.slice(0, FACET_DEFAULT_VISIBLE);
+    const hiddenCount = values.length - visible.length;
+
+    const chipsHtml = visible.map(v =>
+      `<button type="button" class="chip${activeSet.has(v) ? ' active' : ''}" data-value="${esc(v)}">${esc(v)} <span class="chip-count">${counts[v]}</span></button>`
+    ).join('');
+
+    const toggleHtml = hiddenCount > 0
+      ? `<button type="button" class="chip chip-toggle">+${hiddenCount} more</button>`
+      : expanded && values.length > FACET_DEFAULT_VISIBLE
+        ? `<button type="button" class="chip chip-toggle">Show less</button>`
+        : '';
+
+    container.innerHTML = chipsHtml + toggleHtml;
+
+    container.querySelectorAll('.chip:not(.chip-toggle)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.value;
+        if (activeSet.has(v)) activeSet.delete(v);
+        else activeSet.add(v);
+        renderChips();
+        render();
+      });
+    });
+
+    const toggleBtn = container.querySelector('.chip-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        expanded = !expanded;
+        renderChips();
+      });
+    }
+  }
+
+  renderChips();
+}
+
+function buildFacetDropdown(prefix, activeSet, getValue) {
+  const btn      = document.getElementById(`${prefix}-dropdown-btn`);
+  const label    = document.getElementById(`${prefix}-dropdown-label`);
+  const panel    = document.getElementById(`${prefix}-dropdown-panel`);
+  const wrap     = document.getElementById(`${prefix}-dropdown`);
+  if (!btn || !panel || !wrap) return;
+
+  const counts = {};
+  allReleases.forEach(r => {
+    const v = getValue(r);
+    if (v) counts[v] = (counts[v] ?? 0) + 1;
+  });
+  const values = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+  if (!values.length) {
+    wrap.classList.add('hidden');
+    return;
+  }
+
+  function updateLabel() {
+    if (!activeSet.size) label.textContent = 'All products';
+    else if (activeSet.size === 1) label.textContent = [...activeSet][0];
+    else label.textContent = `${activeSet.size} selected`;
+  }
+
+  panel.innerHTML = values.map(v => `
+    <label class="facet-dropdown-item">
+      <input type="checkbox" value="${esc(v)}" ${activeSet.has(v) ? 'checked' : ''} />
+      <span>${esc(v)}</span>
+      <span class="chip-count">${counts[v]}</span>
+    </label>
+  `).join('');
+
+  panel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) activeSet.add(cb.value);
+      else activeSet.delete(cb.value);
+      updateLabel();
       render();
     });
   });
+
+  function openPanel() {
+    panel.classList.remove('hidden');
+    btn.setAttribute('aria-expanded', 'true');
+  }
+  function closePanel() {
+    panel.classList.add('hidden');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    panel.classList.contains('hidden') ? openPanel() : closePanel();
+  });
+  document.addEventListener('click', e => {
+    if (!wrap.contains(e.target)) closePanel();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closePanel();
+  });
+
+  updateLabel();
 }
 
 function setupSearch() {

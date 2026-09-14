@@ -24,6 +24,10 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg);
@@ -32,6 +36,7 @@ body {
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 main {
@@ -120,7 +125,15 @@ header h1 {
 .tabs {
   display: flex;
   gap: 4px;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -128,6 +141,8 @@ header h1 {
   border: none;
   cursor: pointer;
   padding: 4px 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
   color: #71717a;
@@ -233,12 +248,95 @@ header h1 {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Facet dropdown (multi-select) ── */
+.facet-dropdown {
+  position: relative;
+}
+
+.facet-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #71717a;
+  height: 26px;
+  transition: all 0.15s;
+}
+
+.facet-dropdown-btn:hover,
+.facet-dropdown-btn[aria-expanded="true"] {
+  border-color: rgba(139, 92, 246, 0.3);
+  color: var(--text);
+}
+
+.facet-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 240px;
+  max-width: min(320px, 90vw);
+  max-height: 320px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-hover);
+  padding: 6px;
+}
+
+.facet-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.facet-dropdown-item:hover {
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.facet-dropdown-item input {
+  cursor: pointer;
+}
+
+.facet-dropdown-item span:nth-child(2) {
+  flex: 1;
+}
+
+.chip-toggle {
+  color: var(--accent);
+  font-weight: 600;
+  border-color: rgba(139, 92, 246, 0.2);
+  border-style: dashed;
+}
+
+.chip-toggle:hover {
+  border-style: solid;
+  background: rgba(139, 92, 246, 0.06);
+}
+
 /* ── Filter facet (multi-select chip group) ── */
 .filter-facet {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   margin: 0 0 8px;
+}
+
+.filter-facet .chip-row {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .filter-facet-label {
