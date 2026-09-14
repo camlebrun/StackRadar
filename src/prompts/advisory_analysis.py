@@ -38,9 +38,12 @@ null if no fix version is mentioned.>",
 }}
 
 Rules:
-- Consider the publication date: if the advisory is older than 6 months and a fix is available, \
-lean toward 'safe' unless it is critical/RCE.
+- Consider the publication date: if the advisory is older than 12 months and a fix is available, \
+lean toward 'safe' unless it is critical/RCE. This 'action' field is used to decide whether to page \
+a team on Telegram — only 'patch-now' and 'patch-soon' trigger a notification, so be deliberate, not lenient.
 - 'patch-now' is reserved for active exploits, RCE, authentication bypass, or data loss.
+- No CVSS score or NVD data is provided above — do not invent one. Base "impact" and "action" strictly \
+on the severity and description given.
 - Write for a public audience — avoid internal jargon like 'sprint'.
 - Return valid JSON only — no markdown fences, no commentary.
 """

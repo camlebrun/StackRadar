@@ -12,19 +12,16 @@ import requests as _http
 from src.analyser import (
     analyse_bigquery_release,
     analyse_dbt_package_release,
-    analyse_fusion_historical,
-    analyse_fusion_release,
     analyse_lakehouse_release,
     analyse_release,
 )
 from src.config import TelegramConfig
 from src.digest import get_digest
 from src.fetcher import (
-    HISTORICAL_TAG,
     backfill_releases,
-    fetch_changelog_releases,
     fetch_gcp_docs_releases,
     fetch_readme,
+    fetch_rss_releases,
     get_new_releases,
 )
 from src.security_advisories import analyse_advisory, fetch_advisories
@@ -167,6 +164,8 @@ def _post_process_analysis(
         raw = analysis.get("tags", [])
         valid = [t for t in (raw if isinstance(raw, list) else []) if t in _GCP_VALID_TAGS]
         analysis = {**analysis, "tags": valid[:4]}
+    elif source == "rss":
+        pass  # tags are the product/category pair set at build time — no whitelist to apply
     elif not is_dbt_package:
         raw = analysis.get("tags", [])
         analysis = {**analysis, "tags": _normalize_tags(raw if isinstance(raw, list) else [])}
@@ -238,6 +237,8 @@ def _build_record(
         "cve_details": cve_details,
         "deprecated": deprecated,
         "deprecated_notice": deprecated_notice,
+        "product": release.get("product"),
+        "category": release.get("category"),
     }
 
 
@@ -304,9 +305,14 @@ def _process_repos(
                     min_date=repo_cfg.get("since_date"),
                 )
                 logger.info("[%s] gcp_docs: %d releases", repo, len(releases))
-            elif source == "changelog":
-                releases = fetch_changelog_releases(owner, name, github_token, since=cursor)
-                logger.info("[%s] changelog: %d releases", repo, len(releases))
+            elif source == "rss":
+                releases = fetch_rss_releases(
+                    url=repo_cfg["docs_url"],
+                    display_name=repo_cfg.get("display_name", name),
+                    since=cursor,
+                    min_date=repo_cfg.get("since_date"),
+                )
+                logger.info("[%s] rss: %d releases", repo, len(releases))
             elif cursor is None:
                 releases = backfill_releases(
                     owner,
@@ -319,6 +325,8 @@ def _process_repos(
                 logger.info("[%s] backfill %d releases (min=%s)", repo, len(releases), min_version)
             else:
                 releases = get_new_releases(owner, name, cursor, github_token)
+                if stable_only:
+                    releases = [r for r in releases if not r.get("prerelease")]
                 if minor_only and not is_dbt_package:
                     releases = [
                         r for r in releases if parse_semver(str(r.get("tag_name", ""))).patch == 0
@@ -329,6 +337,7 @@ def _process_repos(
             stale = _is_stale(releases) if is_dbt_package else False
 
             new_count = 0
+            attempted = 0
             latest_published_at = cursor
             # For date-based sources, stop advancing the cursor past any LLM failure
             # so the failed entry is retried on the next run.
@@ -341,11 +350,28 @@ def _process_repos(
                         latest_published_at = str(release.get("published_at", ""))
                     continue
 
-                if llm_delay_s > 0 and new_count > 0:
-                    time.sleep(llm_delay_s)
+                if source != "rss":
+                    if llm_delay_s > 0 and attempted > 0:
+                        time.sleep(llm_delay_s)
+                    attempted += 1
 
-                is_historical = tag == HISTORICAL_TAG
-                if source == "gcp_docs":
+                analysis: dict[str, Any] | None
+                error: str | None
+                if source == "rss":
+                    product = str(release.get("product", "")).strip()
+                    category = str(release.get("category", "")).strip()
+                    tags = [t for t in (product, category) if t]
+                    analysis, error = {
+                        "summary": str(release.get("body", ""))[:500],
+                        "key_changes": [],
+                        "breaking_changes": [],
+                        "migration_notes": "",
+                        "cve_references": [],
+                        "severity": "none",
+                        "tags": tags,
+                        "worth_tracking": True,
+                    }, None
+                elif source == "gcp_docs":
                     if group == "lakehouse":
                         analysis, error = analyse_lakehouse_release(
                             {**release, "repo": repo}, llm_key
@@ -354,10 +380,6 @@ def _process_repos(
                         analysis, error = analyse_bigquery_release(
                             {**release, "repo": repo}, llm_key
                         )
-                elif is_historical:
-                    analysis, error = analyse_fusion_historical({**release, "repo": repo}, llm_key)
-                elif source == "changelog":
-                    analysis, error = analyse_fusion_release({**release, "repo": repo}, llm_key)
                 elif is_dbt_package:
                     analysis, error = analyse_dbt_package_release(
                         {**release, "repo": repo},
@@ -375,12 +397,6 @@ def _process_repos(
                     continue
 
                 analysis = _post_process_analysis(analysis, release, source, is_dbt_package)
-
-                if source == "changelog" and not is_historical:
-                    if not analysis.get("worth_tracking", True):
-                        logger.info("[%s] skipping %s — not worth tracking", repo, tag)
-                        latest_published_at = str(release.get("published_at", ""))
-                        continue
 
                 if is_dbt_package and not _should_store_dbt_release(analysis, release, all_patches):
                     logger.info("[%s] skipping patch %s — not prod-breaking", repo, tag)
@@ -483,6 +499,33 @@ def _build_and_clean_digest(s3: Any, bucket: str) -> tuple[list[dict[str, Any]],
     return all_records, digest_key
 
 
+_ADVISORY_ACTIONS = {"patch-now", "patch-soon", "monitor", "safe"}
+_SEV_TO_ACTION = {"critical": "patch-now", "high": "patch-soon", "medium": "monitor", "low": "safe"}
+_ADVISORY_MAX_AGE_DAYS = 365
+
+
+def _advisory_action(advisory: dict[str, Any]) -> str:
+    """Mirror the frontend's resolveAction(): LLM action if valid, else derived from
+    severity, downgraded to 'safe' once older than a year unless critical."""
+    analysis = advisory.get("analysis") or {}
+    llm_action = analysis.get("action")
+    action = (
+        llm_action
+        if llm_action in _ADVISORY_ACTIONS
+        else _SEV_TO_ACTION.get(str(advisory.get("severity", "")), "monitor")
+    )
+
+    published_at = advisory.get("published_at")
+    if action != "patch-now" and published_at:
+        try:
+            published = datetime.fromisoformat(str(published_at).replace("Z", "+00:00"))
+        except ValueError:
+            return action
+        if (datetime.now(timezone.utc) - published).days > _ADVISORY_MAX_AGE_DAYS:
+            action = "safe"
+    return action
+
+
 def _route_telegram(
     repos: list[dict[str, str]],
     new_records: list[dict[str, Any]],
@@ -509,7 +552,7 @@ def _route_telegram(
                 by_channel["dbt_packages"].append(r)
             else:
                 group = group_map.get(repo, "")
-                if group in ("dbt-core", "dbt-fusion", "dbt-adapters"):
+                if group in ("dbt-core", "dbt-adapters"):
                     by_channel["dbt_core"].append(r)
                 elif group == "orchestration":
                     by_channel["orchestration"].append(r)
@@ -522,8 +565,12 @@ def _route_telegram(
                 logger.info("Telegram #%s notified: %d releases", label, len(records))
 
     if new_advisories and tg_token and "security" in channels:
-        notify_advisories(tg_token, channels["security"], new_advisories)
-        logger.info("Telegram security channel notified: %d advisories", len(new_advisories))
+        notifiable = [
+            a for a in new_advisories if _advisory_action(a) in ("patch-now", "patch-soon")
+        ]
+        if notifiable:
+            notify_advisories(tg_token, channels["security"], notifiable)
+            logger.info("Telegram security channel notified: %d advisories", len(notifiable))
 
     if failed_repos and tg_token and "errors" in channels:
         error_lines = "\n".join(f"• {_tg_escape(r)}" for r in failed_repos)

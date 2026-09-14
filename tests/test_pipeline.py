@@ -155,3 +155,72 @@ def test_no_releases_cursor_unchanged(mock_s3: MagicMock) -> None:
         run_pipeline(mock_s3, "bucket", "key")
 
     mock_set_cursor.assert_not_called()
+
+
+def test_llm_delay_applies_even_after_consecutive_failures(mock_s3: MagicMock) -> None:
+    """Regression: the throttle must not be gated on a prior success, or a single
+    rate-limited call disables all future delays and the pipeline hammers the API."""
+    releases = [_make_release(tag=f"v1.0.{i}") for i in range(3)]
+    with (
+        patch("src.pipeline.load_repos", return_value=[{"repo": "owner/repo"}]),
+        patch("src.pipeline.get_cursor", return_value=None),
+        patch("src.pipeline.backfill_releases", return_value=releases),
+        patch("src.pipeline.release_exists", return_value=False),
+        patch("src.pipeline.analyse_release", return_value=(None, "429 rate_limited")),
+        patch("src.pipeline.put_release"),
+        patch("src.pipeline.set_cursor"),
+        patch("src.pipeline.time.sleep") as mock_sleep,
+    ):
+        run_pipeline(mock_s3, "bucket", "key", llm_delay_s=1.2)
+
+    assert mock_sleep.call_count == len(releases) - 1
+
+
+def test_rss_source_skips_llm_and_tags_by_product_and_category(mock_s3: MagicMock) -> None:
+    """RSS items (e.g. Scaleway) are too short to need LLM analysis — they're stored
+    directly, tagged by the feed's product/category pair instead of an LLM call."""
+    rss_release = {
+        "tag_name": "some-feature",
+        "name": "Functions | Some feature shipped",
+        "body": "Short changelog blurb.",
+        "published_at": "2026-05-01T00:00:00+00:00",
+        "html_url": "https://example.com/changelog#some-feature",
+        "prerelease": False,
+        "draft": False,
+        "id": None,
+        "author": None,
+        "category": "serverless",
+        "product": "Functions",
+    }
+    stored: dict[str, object] = {}
+    with (
+        patch(
+            "src.pipeline.load_repos",
+            return_value=[
+                {
+                    "repo": "scaleway/changelog",
+                    "group": "scaleway",
+                    "source": "rss",
+                    "docs_url": "https://example.com/rss.xml",
+                }
+            ],
+        ),
+        patch("src.pipeline.get_cursor", return_value=None),
+        patch("src.pipeline.fetch_rss_releases", return_value=[rss_release]),
+        patch("src.pipeline.release_exists", return_value=False),
+        patch("src.pipeline.analyse_release") as mock_analyse,
+        patch(
+            "src.pipeline.put_release",
+            side_effect=lambda _s3, _b, record: stored.update(record),
+        ),
+        patch("src.pipeline.set_cursor"),
+        patch("src.pipeline.time.sleep") as mock_sleep,
+    ):
+        run_pipeline(mock_s3, "bucket", "key")
+
+    mock_analyse.assert_not_called()
+    mock_sleep.assert_not_called()
+    assert stored["analysis"]["tags"] == ["Functions", "serverless"]
+    assert stored["analysis"]["severity"] == "none"
+    assert stored["product"] == "Functions"
+    assert stored["category"] == "serverless"

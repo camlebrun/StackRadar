@@ -15,8 +15,6 @@ from pydantic import BaseModel, ValidationError, model_validator
 from src.config import LLM_MAX_TOKENS, MISTRAL_MODEL
 from src.prompts.bigquery_release_analysis import BIGQUERY_RELEASE_ANALYSIS_PROMPT
 from src.prompts.dbt_package_analysis import DBT_PACKAGE_ANALYSIS_PROMPT
-from src.prompts.fusion_historical import FUSION_HISTORICAL_PROMPT
-from src.prompts.fusion_release_analysis import FUSION_RELEASE_ANALYSIS_PROMPT
 from src.prompts.lakehouse_release_analysis import LAKEHOUSE_RELEASE_ANALYSIS_PROMPT
 from src.prompts.release_analysis import RELEASE_ANALYSIS_PROMPT
 
@@ -212,18 +210,6 @@ def analyse_dbt_package_release(
     return analysis, error
 
 
-def analyse_fusion_release(
-    release: dict[str, object],
-    api_key: str,
-) -> tuple[dict[str, object] | None, str | None]:
-    """Analyse a dbt-fusion preview release; includes worth_tracking flag."""
-    repo = str(release.get("repo", ""))
-    tag = str(release.get("tag_name", ""))
-    body = str(release.get("body", ""))[:5000]
-    prompt = FUSION_RELEASE_ANALYSIS_PROMPT.format(repo=repo, tag=tag, body=body)
-    return _analyse_with_model(prompt, api_key, AnalysisResult, f"{repo}@{tag}")
-
-
 def analyse_lakehouse_release(
     release: dict[str, object],
     api_key: str,
@@ -246,23 +232,3 @@ def analyse_bigquery_release(
     body = str(release.get("body", ""))[:5000]
     prompt = BIGQUERY_RELEASE_ANALYSIS_PROMPT.format(tag=tag, name=name, body=body)
     return _analyse_with_model(prompt, api_key, BigQueryAnalysisResult, tag)
-
-
-def analyse_fusion_historical(
-    release: dict[str, object],
-    api_key: str,
-) -> tuple[dict[str, object] | None, str | None]:
-    """Analyse the consolidated pre-2026 dbt-fusion historical entry."""
-    repo = str(release.get("repo", ""))
-    tag = str(release.get("tag_name", ""))
-    meta = release.get("_historical_meta", {})
-    if not isinstance(meta, dict):
-        meta = {}
-    prompt = FUSION_HISTORICAL_PROMPT.format(
-        version_count=meta.get("version_count", "?"),
-        first_version=meta.get("first_version", ""),
-        last_version=meta.get("last_version", ""),
-        version_list=meta.get("version_list", ""),
-        body_sample=str(release.get("body", ""))[:4000],
-    )
-    return _analyse_with_model(prompt, api_key, AnalysisResult, f"{repo}@{tag}")

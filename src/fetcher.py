@@ -4,6 +4,8 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from xml.etree import ElementTree
 
 import requests
 
@@ -323,147 +325,83 @@ def fetch_gcp_docs_releases(
 
 
 # ---------------------------------------------------------------------------
-# Changelog-based fetcher (for repos with no GitHub releases, e.g. dbt-fusion)
+# RSS feed fetcher (date-based, one item per feature — e.g. Scaleway changelog)
 # ---------------------------------------------------------------------------
 
-_CHANGELOG_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+-preview\.\d+)$")
-_CHANGELOG_DATE_RE = re.compile(r"Released\s+(\w+ \d+, \d{4})")
-_HISTORICAL_CUTOFF = "2026-01-01T00:00:00+00:00"
-_HISTORICAL_TAG = "2.0.0-pre-2026"
-HISTORICAL_TAG = _HISTORICAL_TAG
+_RSS_TIMEOUT_S = 20
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
-def _parse_changelog_date(text: str) -> str | None:
-    m = _CHANGELOG_DATE_RE.search(text)
-    if not m:
-        return None
-    try:
-        dt = datetime.strptime(m.group(1), "%B %d, %Y").replace(tzinfo=timezone.utc)
-        return dt.isoformat()
-    except ValueError:
-        return None
+def _strip_html(text: str) -> str:
+    return re.sub(r"\s+", " ", _HTML_TAG_RE.sub(" ", text)).strip()
 
 
-def _changelog_anchor(version: str) -> str:
-    anchor = version.replace(".", "")
-    return f"https://github.com/dbt-labs/dbt-fusion/blob/main/CHANGELOG.md#{anchor}"
-
-
-def _build_historical_record(
-    pre_releases: list[dict[str, object]],
-    owner: str,
-    repo: str,
-) -> dict[str, object]:
-    """Merge all pre-2026 releases into one consolidated synthetic record."""
-    pre_releases_sorted = sorted(pre_releases, key=lambda r: str(r["published_at"]))
-    first = str(pre_releases_sorted[0]["tag_name"])
-    last = str(pre_releases_sorted[-1]["tag_name"])
-    published_at = str(pre_releases_sorted[-1]["published_at"])
-
-    version_list = "\n".join(
-        f"- {r['tag_name']} ({str(r['published_at'])[:10]})" for r in pre_releases_sorted
-    )
-
-    # Sample: first 2 + last 2 versions for LLM context
-    sample_releases = pre_releases_sorted[:2] + pre_releases_sorted[-2:]
-    body_sample = "\n\n---\n\n".join(
-        f"### {r['tag_name']}\n{str(r['body'])[:600]}" for r in sample_releases
-    )
-
-    return {
-        "tag_name": _HISTORICAL_TAG,
-        "name": f"dbt-fusion — Historical snapshot ({first} → {last})",
-        "body": body_sample,
-        "published_at": published_at,
-        "html_url": f"https://github.com/{owner}/{repo}/blob/main/CHANGELOG.md",
-        "prerelease": True,
-        "draft": False,
-        "id": None,
-        "author": None,
-        "_historical_meta": {
-            "version_count": len(pre_releases),
-            "first_version": first,
-            "last_version": last,
-            "version_list": version_list,
-        },
-    }
-
-
-def fetch_changelog_releases(
-    owner: str,
-    repo: str,
-    token: str | None = None,
+def fetch_rss_releases(
+    url: str,
+    display_name: str,
     since: str | None = None,
+    min_date: str | None = None,
 ) -> list[dict[str, object]]:
-    """Parse CHANGELOG.md and return release-like records.
+    """Fetch a standard RSS 2.0 feed. Each <item> becomes one release-like record.
 
-    Pre-2026 versions are merged into a single historical entry.
-    2026+ versions matching X.Y.Z-preview.N are returned individually.
-    Patch versions (Z > 0), nightly, and beta entries are excluded.
+    url: the feed's .xml URL.
+    display_name: human label used in record name if the item has no title.
+    since: ISO timestamp cursor — items on or before this date are skipped.
+    min_date: ISO date lower bound used when since is None (e.g. '2026-01-01').
     """
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/CHANGELOG.md"
-    resp = requests.get(
-        url,
-        headers=_github_headers(token, accept="application/vnd.github.raw+json"),
-        timeout=GITHUB_TIMEOUT_S,
-    )
+    resp = requests.get(url, timeout=_RSS_TIMEOUT_S)
     if not resp.ok:
-        raise GitHubFetchError(resp.status_code, resp.text[:200])
+        raise RuntimeError(f"{display_name} RSS fetch failed: {resp.status_code}")
 
-    raw = resp.text
+    root = ElementTree.fromstring(resp.content)
     since_dt = datetime.fromisoformat(since.replace("Z", "+00:00")) if since else None
-    cutoff_dt = datetime.fromisoformat(_HISTORICAL_CUTOFF)
+    if min_date and not since_dt:
+        min_dt = datetime.fromisoformat(min_date + "T00:00:00+00:00")
+    else:
+        min_dt = None
 
-    sections = re.split(r"^## ", raw, flags=re.MULTILINE)
-    pre_releases: list[dict[str, object]] = []
     releases: list[dict[str, object]] = []
-
-    for section in sections:
-        lines = section.strip().splitlines()
-        if not lines:
+    for item in root.findall(".//item"):
+        pub_date_raw = item.findtext("pubDate")
+        if not pub_date_raw:
             continue
-        header = lines[0].strip()
-        if not _CHANGELOG_VERSION_RE.match(header):
+        try:
+            dt = parsedate_to_datetime(pub_date_raw)
+        except (TypeError, ValueError):
             continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
 
-        sv = parse_semver(header)
-        if sv.valid and sv.patch > 0:
+        if since_dt and dt <= since_dt:
             continue
-
-        body = "\n".join(lines[1:]).strip()
-        published_at = _parse_changelog_date(body)
-        if published_at is None:
+        if min_dt and dt < min_dt:
             continue
 
-        pub_dt = datetime.fromisoformat(published_at)
+        link = (item.findtext("link") or "").strip()
+        guid = (item.findtext("guid") or link).strip()
+        title = (item.findtext("title") or display_name).strip()
+        description = _strip_html(item.findtext("description") or "")
+        category = (item.findtext("category") or "").strip()
 
-        if pub_dt < cutoff_dt:
-            pre_releases.append({"tag_name": header, "body": body, "published_at": published_at})
-            continue
+        product, _, _headline = title.partition(" | ")
+        product = product.strip() if _headline else ""
 
-        if since_dt and pub_dt <= since_dt:
-            continue
+        tag = link.rsplit("#", 1)[-1] or guid.rsplit("/", 1)[-1] or dt.strftime("%Y-%m-%dT%H%M%S")
 
         releases.append(
             {
-                "tag_name": header,
-                "name": header,
-                "body": body,
-                "published_at": published_at,
-                "html_url": _changelog_anchor(header),
-                "prerelease": True,
+                "tag_name": tag,
+                "name": title,
+                "body": description,
+                "published_at": dt.isoformat(),
+                "html_url": link or guid,
+                "prerelease": False,
                 "draft": False,
                 "id": None,
                 "author": None,
+                "category": category,
+                "product": product,
             }
         )
 
-    result: list[dict[str, object]] = []
-
-    # Include historical entry only on first backfill (no cursor yet)
-    historical_already_stored = since_dt is not None
-    if pre_releases and not historical_already_stored:
-        result.append(_build_historical_record(pre_releases, owner, repo))
-
-    result.extend(sorted(releases, key=lambda r: str(r["published_at"])))
-    return result
+    return sorted(releases, key=lambda r: str(r["published_at"]))

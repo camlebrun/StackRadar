@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dbt Fusion · StackRadar</title>
+  <title>Scaleway · StackRadar</title>
   <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="stylesheet" href="/style.css" />
 </head>
@@ -20,21 +20,11 @@
         <a class="tab" href="/">Release Notes <span class="badge" id="release-count"></span></a>
         <a class="tab" href="/security/">Security <span class="badge badge-cve" id="advisory-count"></span></a>
         <a class="tab" href="/dbt-packages/">dbt Packages <span class="badge" id="pkg-count"></span></a>
-        <a class="tab active" href="/dbt-fusion/">dbt Fusion <span class="badge" id="fusion-count"></span></a>
         <a class="tab" href="/bigquery/">BigQuery <span class="badge" id="bq-count"></span></a>
         <a class="tab" href="/lakehouse/">Lakehouse <span class="badge" id="lh-count"></span></a>
+        <a class="tab active" href="/scaleway/">Scaleway <span class="badge" id="scw-count"></span></a>
       </div>
 
-      <div class="divider"></div>
-
-      <select id="tag-select" class="tag-select">
-        <option value="all">All tags</option>
-      </select>
-
-      <select id="latest-select" class="tag-select">
-        <option value="latest">Latest only</option>
-        <option value="all">All versions</option>
-      </select>
     </div>
   </header>
 
@@ -45,16 +35,20 @@
         <path d="M8 7v5M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>
-        <strong>dbt Fusion</strong> is dbt's new Rust-based engine — tracked separately because it uses a distinct versioning scheme and release channel (preview builds via <em>CHANGELOG.md</em>, not GitHub releases).
-        Minor releases only · patches excluded unless prod-breaking.
+        <strong>Scaleway</strong> changelog — tracked verbatim from the <a href="https://www.scaleway.com/en/docs/changelog/" target="_blank" rel="noopener">official RSS feed</a>, since 2025.
+        Each entry is Scaleway's own text, grouped by product and category — no AI summary is applied here, these entries are already short.
       </span>
     </div>
-    <div class="ai-disclaimer">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm.75 10.5h-1.5v-1.5h1.5v1.5Zm0-3h-1.5V4.5h1.5V8.5Z" fill="currentColor"/></svg>
-      Summaries are AI-generated and have not been reviewed by a human.
+    <div class="filter-facet">
+      <span class="filter-facet-label">Product</span>
+      <div id="product-chips" class="chip-row"></div>
     </div>
-    <div id="fusion-grid" class="bento-grid"></div>
-    <p id="empty-fusion" class="empty-state hidden">No releases match your filter.</p>
+    <div class="filter-facet">
+      <span class="filter-facet-label">Category</span>
+      <div id="category-chips" class="chip-row"></div>
+    </div>
+    <div id="scw-grid" class="bento-grid"></div>
+    <p id="empty-scw" class="empty-state hidden">No releases match your filter.</p>
     <p id="loading" class="loading">Loading releases…</p>
   </main>
 
@@ -64,7 +58,6 @@
     <div class="drawer-header">
       <div class="drawer-meta">
         <span id="drawer-repo" class="card-repo"></span>
-        <span id="drawer-sev" class="sev"></span>
       </div>
       <button id="drawer-close" class="drawer-close" aria-label="Close">✕</button>
     </div>
@@ -76,20 +69,20 @@
         <h3 class="drawer-section-title">Key changes</h3>
         <ul id="drawer-changes" class="card-changes drawer-changes"></ul>
       </div>
+      <div id="drawer-breaking-wrap" class="drawer-section hidden">
+        <h3 class="drawer-section-title">Breaking changes</h3>
+        <ul id="drawer-breaking" class="card-changes drawer-changes"></ul>
+      </div>
       <div id="drawer-tags-wrap" class="drawer-section hidden">
         <div id="drawer-tags" class="tags"></div>
       </div>
-      <div id="drawer-cve-wrap" class="drawer-section hidden">
-        <h3 class="drawer-section-title">CVE references</h3>
-        <div id="drawer-cves" class="drawer-cves"></div>
-      </div>
       <a id="drawer-link" class="drawer-link" target="_blank" rel="noopener">
-        View changelog →
+        View release notes →
       </a>
     </div>
   </aside>
 
-  <script type="module" src="/dbt-fusion/app.js"></script>
+  <script type="module" src="/scaleway/app.js"></script>
   <footer class="site-footer">Made by <a href="https://camillelebrun.fr" target="_blank" rel="noopener">Camille Lebrun</a></footer>
 </body>
 </html>

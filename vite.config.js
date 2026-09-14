@@ -12,10 +12,10 @@ export default {
       input: {
         main: resolve('public', 'index.html'),
         dbtPackages: resolve('public', 'dbt-packages', 'index.html'),
-        dbtFusion: resolve('public', 'dbt-fusion', 'index.html'),
         security: resolve('public', 'security', 'index.html'),
         bigquery: resolve('public', 'bigquery', 'index.html'),
         lakehouse: resolve('public', 'lakehouse', 'index.html'),
+        scaleway: resolve('public', 'scaleway', 'index.html'),
       },
     },
   },
