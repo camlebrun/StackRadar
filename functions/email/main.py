@@ -20,19 +20,20 @@ logger = logging.getLogger(__name__)
 
 GCP_PROJECT = "git-release-496817"
 
+# Same badge pairs as the site (public/style.css --sev-*), all >= 4.5:1.
 _SEV_BG = {
-    "critical": "#fee2e2",
-    "high": "#fff4ed",
-    "medium": "#fffbeb",
-    "low": "#eff6ff",
-    "none": "#f3f4f6",
+    "critical": "#f6dcd3",
+    "high": "#f8e3cd",
+    "medium": "#f7ecc6",
+    "low": "#e1ebe3",
+    "none": "#ece6dc",
 }
 _SEV_FG = {
-    "critical": "#dc2626",
-    "high": "#ea580c",
-    "medium": "#d97706",
-    "low": "#2563eb",
-    "none": "#6b7280",
+    "critical": "#8f2a12",
+    "high": "#8a4300",
+    "medium": "#6b5200",
+    "low": "#2f5d3d",
+    "none": "#5d6677",
 }
 
 _TEMPLATES = Path(__file__).parent / "templates"
@@ -65,7 +66,6 @@ def _safe_text(s: str) -> str:
     )
 
 
-
 def _render_card(r: dict[str, Any]) -> str:
     a = r.get("analysis") or {}
     sev = a.get("severity", "none")
@@ -74,8 +74,8 @@ def _render_card(r: dict[str, Any]) -> str:
     changes_block = ""
     if changes:
         items = "".join(
-            f'<li style="margin:6px 0;color:#6b7280;-webkit-text-fill-color:#6b7280;font-size:13px;line-height:1.5;">'
-            f'<span style="color:#8b5cf6;-webkit-text-fill-color:#8b5cf6;font-weight:700;margin-right:8px;">&rsaquo;</span>'
+            f'<li style="margin:6px 0;color:#5d6677;-webkit-text-fill-color:#5d6677;font-size:13px;line-height:1.5;">'
+            f'<span style="color:#8d4f26;-webkit-text-fill-color:#8d4f26;font-weight:700;margin-right:8px;">&rsaquo;</span>'
             f"{_safe_text(str(c))}</li>"
             for c in changes
         )
@@ -83,8 +83,8 @@ def _render_card(r: dict[str, Any]) -> str:
 
     tpl = (_TEMPLATES / "email_card.html").read_text()
     return (
-        tpl.replace("{{sev_bg}}", _SEV_BG.get(sev, "#f3f4f6"))
-        .replace("{{sev_fg}}", _SEV_FG.get(sev, "#6b7280"))
+        tpl.replace("{{sev_bg}}", _SEV_BG.get(sev, _SEV_BG["none"]))
+        .replace("{{sev_fg}}", _SEV_FG.get(sev, _SEV_FG["none"]))
         .replace("{{severity}}", sev)
         .replace("{{repo_owner}}", repo.split("/")[0])
         .replace("{{repo_name}}", repo.split("/")[-1])
@@ -109,28 +109,29 @@ def _build_html(releases: list[dict[str, Any]]) -> str:
 
 def _fail_html(error: str, repo: str | None) -> str:
     context = (
-        f"<p style='margin:0 0 8px;color:#6b7280;font-size:13px;'>"
+        f"<p style='margin:0 0 8px;color:#5d6677;font-size:13px;'>"
         f"Repo: <strong>{repo}</strong></p>"
         if repo
         else ""
     )
     return (
-        '<!DOCTYPE html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head><body style="margin:0;padding:0;'
-        "background-color:#f5f3ff;"
-        'font-family:-apple-system,sans-serif;">'
+        '<!DOCTYPE html><html><head><meta name="color-scheme" content="light only">'
+        '<meta name="supported-color-schemes" content="light only"></head>'
+        '<body style="margin:0;padding:0;background-color:#f5f0e8;'
+        "font-family:'DM Sans',Helvetica,Arial,sans-serif;\">"
         '<div style="max-width:600px;margin:0 auto;padding:32px 16px;">'
         '<div style="margin-bottom:20px;">'
-        '<span style="font-size:16px;font-weight:700;color:#5b5fc7;display:flex;align-items:center;gap:8px;">'
-        "📡 StackRadar</span></div>"
-        '<div style="background:white;border-radius:20px;border:1px solid #fee2e2;'
-        'border-left:3px solid #dc2626;padding:20px 24px;">'
-        '<h2 style="margin:0 0 12px;color:#dc2626;font-size:16px;font-weight:700;">'
-        "⚠ Pipeline failure</h2>"
+        "<span style=\"font-family:'Playfair Display',Georgia,serif;font-size:18px;"
+        'font-weight:700;color:#1b2230;">StackRadar</span></div>'
+        '<div style="background:#ffffff;border-radius:16px;border:1px solid #e6d8c8;'
+        'border-left:3px solid #8f2a12;padding:20px 24px;">'
+        '<h2 style="margin:0 0 12px;color:#8f2a12;font-size:16px;font-weight:700;">'
+        "Pipeline failure</h2>"
         f"{context}"
-        f'<pre style="margin:0;background:#fef2f2;border-radius:8px;padding:12px;'
-        f'font-size:12px;color:#7f1d1d;overflow:auto;white-space:pre-wrap;">{error}</pre>'
+        f'<pre style="margin:0;background:#f6dcd3;border-radius:8px;padding:12px;'
+        f'font-size:12px;color:#8f2a12;overflow:auto;white-space:pre-wrap;">{error}</pre>'
         "</div>"
-        '<p style="margin:20px 0 0;color:#9ca3af;font-size:11px;">Sent by StackRadar</p>'
+        '<p style="margin:20px 0 0;color:#5d6677;font-size:11px;">Sent by StackRadar</p>'
         "</div></body></html>"
     )
 
