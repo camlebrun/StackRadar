@@ -40,11 +40,8 @@ _SEV_FG = {
 
 _TEMPLATES = Path(__file__).parent / "templates"
 
-_ICON_URL = "https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev/icon.png"
-
 # Module-level secret cache — loaded once per cold start
 _secrets: dict[str, str] = {}
-_icon_data_url: str | None = None
 
 
 def _get_secret(name: str) -> str:
@@ -135,7 +132,6 @@ def _build_html(releases: list[dict[str, Any]]) -> str:
         tpl.replace("{{count}}", str(count))
         .replace("{{count_plural}}", "s" if count > 1 else "")
         .replace("{{cards}}", cards)
-        .replace("{{icon_data_url}}", _ICON_URL)
     )
 
 
@@ -154,7 +150,7 @@ def _fail_html(error: str, repo: str | None) -> str:
         '<div style="max-width:600px;margin:0 auto;padding:32px 16px;">'
         '<div style="margin-bottom:20px;">'
         "<span style=\"font-family:'Playfair Display',Georgia,serif;font-size:18px;"
-        'font-weight:700;color:#1b2230;">StackRadar</span></div>'
+        'font-weight:700;color:#1b2230;">&#128225; StackRadar</span></div>'
         '<div style="background:#ffffff;border-radius:16px;border:1px solid #e6d8c8;'
         'border-left:3px solid #8f2a12;padding:20px 24px;">'
         '<h2 style="margin:0 0 12px;color:#8f2a12;font-size:16px;font-weight:700;">'

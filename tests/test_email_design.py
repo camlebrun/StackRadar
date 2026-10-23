@@ -87,3 +87,9 @@ def test_card_escapes_untrusted_text(email_main: ModuleType) -> None:
     release["analysis"]["summary"] = "<script>alert(1)</script>"
     html = email_main._render_card(release)
     assert "<script>" not in html and "&lt;script&gt;" in html
+
+
+def test_logo_is_the_site_emoji_not_a_remote_image(email_main: ModuleType) -> None:
+    digest = email_main._build_html([_release("high")])
+    assert "&#128225; StackRadar" in digest and "<img" not in digest
+    assert "&#128225; StackRadar" in email_main._fail_html("boom", None)
