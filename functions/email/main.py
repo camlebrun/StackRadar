@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import html
 import json
 import logging
 import smtplib
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -20,28 +22,26 @@ logger = logging.getLogger(__name__)
 
 GCP_PROJECT = "git-release-496817"
 
+# Same badge pairs as the site (public/style.css --sev-*), all >= 4.5:1.
 _SEV_BG = {
-    "critical": "#fee2e2",
-    "high": "#fff4ed",
-    "medium": "#fffbeb",
-    "low": "#eff6ff",
-    "none": "#f3f4f6",
+    "critical": "#f6dcd3",
+    "high": "#f8e3cd",
+    "medium": "#f7ecc6",
+    "low": "#e1ebe3",
+    "none": "#ece6dc",
 }
 _SEV_FG = {
-    "critical": "#dc2626",
-    "high": "#ea580c",
-    "medium": "#d97706",
-    "low": "#2563eb",
-    "none": "#6b7280",
+    "critical": "#8f2a12",
+    "high": "#8a4300",
+    "medium": "#6b5200",
+    "low": "#2f5d3d",
+    "none": "#5d6677",
 }
 
 _TEMPLATES = Path(__file__).parent / "templates"
 
-_ICON_URL = "https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev/icon.png"
-
 # Module-level secret cache — loaded once per cold start
 _secrets: dict[str, str] = {}
-_icon_data_url: str | None = None
 
 
 def _get_secret(name: str) -> str:
@@ -65,33 +65,62 @@ def _safe_text(s: str) -> str:
     )
 
 
+# Same display names as the site (public/app.js REPO_DISPLAY).
+_REPO_DISPLAY = {
+    "dagster-io/dagster": "Dagster",
+    "kestra-io/kestra": "Kestra",
+    "apache/airflow": "Airflow",
+}
+
+
+def _h(value: Any) -> str:
+    """HTML-escape LLM / GitHub text before it goes into the template."""
+    return html.escape(_safe_text(str(value)))
+
+
+def _format_date(iso: str) -> str:
+    try:
+        d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return f"{d:%b} {d.day}, {d.year}"
+
 
 def _render_card(r: dict[str, Any]) -> str:
+    """Same card as the site: repo, severity, serif title, date, summary, changes, tags."""
     a = r.get("analysis") or {}
     sev = a.get("severity", "none")
     repo = r.get("repo", "")
-    changes = a.get("key_changes", [])[:4]
+    changes = a.get("key_changes", [])[:3]
     changes_block = ""
     if changes:
         items = "".join(
-            f'<li style="margin:6px 0;color:#6b7280;-webkit-text-fill-color:#6b7280;font-size:13px;line-height:1.5;">'
-            f'<span style="color:#8b5cf6;-webkit-text-fill-color:#8b5cf6;font-weight:700;margin-right:8px;">&rsaquo;</span>'
-            f"{_safe_text(str(c))}</li>"
+            f'<li style="margin:6px 0;color:#5d6677;-webkit-text-fill-color:#5d6677;font-size:13px;line-height:1.5;">'
+            f'<span style="color:#8d4f26;-webkit-text-fill-color:#8d4f26;font-weight:700;margin-right:8px;">&rsaquo;</span>'
+            f"{_h(c)}</li>"
             for c in changes
         )
         changes_block = f'<ul style="margin:0;padding:0;list-style:none;">{items}</ul>'
 
+    tags = [t for t in a.get("tags", []) if t != "pre-release"][:3]
+    tags_block = "".join(
+        '<span style="display:inline-block;background:#f4ebe3;color:#8d4f26;border:1px solid #e8dbcf;'
+        f'border-radius:6px;padding:3px 8px;font-size:11px;font-weight:500;margin-right:6px;">{_h(t)}</span>'
+        for t in tags
+    )
+
     tpl = (_TEMPLATES / "email_card.html").read_text()
     return (
-        tpl.replace("{{sev_bg}}", _SEV_BG.get(sev, "#f3f4f6"))
-        .replace("{{sev_fg}}", _SEV_FG.get(sev, "#6b7280"))
-        .replace("{{severity}}", sev)
-        .replace("{{repo_owner}}", repo.split("/")[0])
-        .replace("{{repo_name}}", repo.split("/")[-1])
-        .replace("{{tag}}", str(r.get("tag", "")))
-        .replace("{{summary}}", _safe_text(a.get("summary", "No summary available.")))
+        tpl.replace("{{sev_bg}}", _SEV_BG.get(sev, _SEV_BG["none"]))
+        .replace("{{sev_fg}}", _SEV_FG.get(sev, _SEV_FG["none"]))
+        .replace("{{severity}}", _h(sev))
+        .replace("{{repo_label}}", _h(_REPO_DISPLAY.get(repo, repo.split("/")[-1])))
+        .replace("{{title}}", _h(r.get("name") or r.get("tag", "")))
+        .replace("{{date}}", _format_date(str(r.get("published_at", ""))))
+        .replace("{{summary}}", _h(a.get("summary", "No summary available.")))
         .replace("{{changes_block}}", changes_block)
-        .replace("{{url}}", str(r.get("html_url", "#")))
+        .replace("{{tags_block}}", tags_block)
+        .replace("{{url}}", html.escape(str(r.get("html_url", "#"))))
     )
 
 
@@ -103,34 +132,34 @@ def _build_html(releases: list[dict[str, Any]]) -> str:
         tpl.replace("{{count}}", str(count))
         .replace("{{count_plural}}", "s" if count > 1 else "")
         .replace("{{cards}}", cards)
-        .replace("{{icon_data_url}}", _ICON_URL)
     )
 
 
 def _fail_html(error: str, repo: str | None) -> str:
     context = (
-        f"<p style='margin:0 0 8px;color:#6b7280;font-size:13px;'>"
+        f"<p style='margin:0 0 8px;color:#5d6677;font-size:13px;'>"
         f"Repo: <strong>{repo}</strong></p>"
         if repo
         else ""
     )
     return (
-        '<!DOCTYPE html><html><head><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head><body style="margin:0;padding:0;'
-        "background-color:#f5f3ff;"
-        'font-family:-apple-system,sans-serif;">'
+        '<!DOCTYPE html><html><head><meta name="color-scheme" content="light only">'
+        '<meta name="supported-color-schemes" content="light only"></head>'
+        '<body style="margin:0;padding:0;background-color:#f5f0e8;'
+        "font-family:'DM Sans',Helvetica,Arial,sans-serif;\">"
         '<div style="max-width:600px;margin:0 auto;padding:32px 16px;">'
         '<div style="margin-bottom:20px;">'
-        '<span style="font-size:16px;font-weight:700;color:#5b5fc7;display:flex;align-items:center;gap:8px;">'
-        "📡 StackRadar</span></div>"
-        '<div style="background:white;border-radius:20px;border:1px solid #fee2e2;'
-        'border-left:3px solid #dc2626;padding:20px 24px;">'
-        '<h2 style="margin:0 0 12px;color:#dc2626;font-size:16px;font-weight:700;">'
-        "⚠ Pipeline failure</h2>"
+        "<span style=\"font-family:'Playfair Display',Georgia,serif;font-size:18px;"
+        'font-weight:700;color:#1b2230;">&#128225; StackRadar</span></div>'
+        '<div style="background:#ffffff;border-radius:16px;border:1px solid #e6d8c8;'
+        'border-left:3px solid #8f2a12;padding:20px 24px;">'
+        '<h2 style="margin:0 0 12px;color:#8f2a12;font-size:16px;font-weight:700;">'
+        "Pipeline failure</h2>"
         f"{context}"
-        f'<pre style="margin:0;background:#fef2f2;border-radius:8px;padding:12px;'
-        f'font-size:12px;color:#7f1d1d;overflow:auto;white-space:pre-wrap;">{error}</pre>'
+        f'<pre style="margin:0;background:#f6dcd3;border-radius:8px;padding:12px;'
+        f'font-size:12px;color:#8f2a12;overflow:auto;white-space:pre-wrap;">{error}</pre>'
         "</div>"
-        '<p style="margin:20px 0 0;color:#9ca3af;font-size:11px;">Sent by StackRadar</p>'
+        '<p style="margin:20px 0 0;color:#5d6677;font-size:11px;">Sent by StackRadar</p>'
         "</div></body></html>"
     )
 
