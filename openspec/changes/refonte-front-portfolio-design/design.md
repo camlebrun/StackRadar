@@ -26,12 +26,15 @@ The front is six static pages (`/`, `/security`, `/dbt-packages`, `/bigquery`, `
 6. **Warm severity palette**, chosen for contrast on beige rather than for hue fidelity: critical rust-red, high ochre-orange, medium amber on cream, low sage, none grey. Exact values are fixed during implementation with a contrast script (≥ 4.5:1 per badge).
 7. **Fonts via the same Google Fonts URL as the portfolio**, with `font-display: swap` and system fallbacks so a blocked request never hides text.
 
+8. **Emails get the same tokens, but fallback fonts first.** Most mail clients ignore web fonts, so headings are `Playfair Display, Georgia` and body `DM Sans, Helvetica, Arial`, all styling inline (the existing approach). The severity pairs are duplicated in `functions/email/main.py` because the Cloud Function ships separately from `public/`; a comment names the source so the two stay in step.
+
 ## Risks / Trade-offs
 
 - [Playfair/DM Sans add a third-party request and a layout shift] → `font-display: swap`, fallback stacks sized close to the web fonts.
 - [Medium+ default hides `low` releases on every release page, which some visitors may miss] → the select states "Medium and above" and the URL `?sev=all` is linkable.
 - [Grouping hides patches behind a click] → row shows the max severity and a "+N hidden" count, and the expanded list is keyboard accessible.
 - [Rewriting `style.css` can regress the five untouched pages] → migrate page by page behind tokens, check each page at 375 px and 1280 px (the mobile overflow fix in #56 must not regress).
+- [Email clients render colours and fonts differently] → keep inline styles and light-only scheme, check the HTML in a browser and with a test send before shipping.
 - [Portfolio tokens drift] → tokens are copied with a comment naming the source file.
 
 ## Migration Plan

@@ -7,27 +7,34 @@
 
 ## 2. Shared modules
 
-- [ ] 2.1 Add `loadDomain(name)` to `public/common.js` with the `manifest.digest` fallback
-- [ ] 2.2 Add `readFilters()` / `writeFilters()` URL helpers with validation and default omission
-- [ ] 2.3 Add a small pure `groupByMinor(records)` helper (max severity, counts, latest date)
+- [x] 2.1 Add `loadDomain(name)` to `public/common.js` with the `manifest.digest` fallback
+- [x] 2.2 Add `readFilters()` / `writeFilters()` URL helpers with validation and default omission
+- [x] 2.3 Add a small pure `groupByMinor(records)` helper (max severity, counts, latest date)
 
 ## 3. Release page
 
-- [ ] 3.1 Load the `dbt` domain through `loadDomain` and restore filters from the URL on load
-- [ ] 3.2 Write filters to the URL on every change (`replaceState`)
-- [ ] 3.3 Render `dbt-core` as minor rows with collapsed patches, "+N hidden" and keyboard-accessible expansion
-- [ ] 3.4 Keep chips `All · dbt core · dbt v2 · dbt-adapters · Orchestration` and the Medium-and-above default
+- [x] 3.1 Load the `dbt` domain through `loadDomain` and restore filters from the URL on load
+- [x] 3.2 Write filters to the URL on every change (`replaceState`)
+- [x] 3.3 Render `dbt-core` as minor rows with collapsed patches, "+N hidden" and keyboard-accessible expansion
+- [x] 3.4 Keep chips `All · dbt core · dbt v2 · dbt-adapters · Orchestration` and the Medium-and-above default
 
 ## 4. Other pages
 
-- [ ] 4.1 Migrate `/security` to the tokens and `loadDomain('security')`
-- [ ] 4.2 Migrate `/dbt-packages` to the tokens and `loadDomain('dbt')`
-- [ ] 4.3 Migrate `/bigquery` and `/lakehouse` to the tokens and `loadDomain('gcp')`
-- [ ] 4.4 Migrate `/scaleway` to the tokens and `loadDomain('scaleway')`
+- [x] 4.1 Migrate `/security` to the tokens and `loadDomain('security')`
+- [x] 4.2 Migrate `/dbt-packages` to the tokens and `loadDomain('dbt')`
+- [x] 4.3 Migrate `/bigquery` and `/lakehouse` to the tokens and `loadDomain('gcp')`
+- [x] 4.4 Migrate `/scaleway` to the tokens and `loadDomain('scaleway')`
 
-## 5. Verification
+## 5. Emails
 
-- [ ] 5.1 `npx vite build` passes
-- [ ] 5.2 Check every page at 375 px and 1280 px for horizontal overflow and contrast
-- [ ] 5.3 Test URL scenarios: default, `?group=dbt-v2&sev=high`, `?sev=banana`, `?sev=all` after reload
-- [ ] 5.4 Check the page works with the fallback (no `digests` in manifest) and with domain digests
+- [x] 5.1 Restyle `functions/email/templates/email_digest.html` and `email_card.html` from the tokens (no gradient, serif headings with Georgia fallback)
+- [x] 5.2 Replace the severity colour maps and the error email markup in `functions/email/main.py` with the site palette
+- [x] 5.3 Add a test asserting the rendered digest contains no old purple values and uses the new severity pairs
+- [x] 5.4 Render a sample digest to HTML and check it in a browser
+
+## 6. Verification
+
+- [x] 6.1 `npx vite build` passes
+- [ ] 6.2 Check every page at 375 px (headless Chrome cannot go below ~500 px, so check by hand) and 1280 px for horizontal overflow and contrast
+- [x] 6.3 Test URL scenarios: default, `?group=dbt-v2&sev=high`, `?sev=banana`, `?sev=all` after reload
+- [ ] 6.4 Check the page works with the fallback (no `digests` in manifest, verified) and with domain digests (after `digest-par-domaine` is deployed)
