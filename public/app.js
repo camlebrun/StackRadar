@@ -5,9 +5,17 @@ import { esc, renderInline, formatDate, safeSev, R2_BASE, MANIFEST_URL } from '.
 
 let allRecords = [];
 let allAdvisories = [];
-let activeSev = 'all';
+let activeSev = 'medium';
 let activeGroup = 'all';
 let activeRepo = 'all';
+
+function majorOf(tag) {
+  const m = /^v?(\d+)\./.exec(tag ?? '');
+  return m ? m[1] : '';
+}
+
+// Severity filter is "at least": the default hides none/low/unknown noise.
+const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1, none: 0, unknown: 0 };
 
 const REPO_DISPLAY = {
   'dagster-io/dagster':      'Dagster',
@@ -16,7 +24,8 @@ const REPO_DISPLAY = {
 };
 
 const GROUP_MAP = {
-  'dbt-core':     ['dbt-core'],
+  'dbt-v2':       ['dbt-core'],
+  'dbt-v1':       ['dbt-core'],
   'dbt-adapters': ['dbt-adapters'],
   orchestration:  ['orchestration'],
 };
@@ -150,7 +159,8 @@ function setupGroupChips() {
 
   const groups = [
     { label: 'All',          key: 'all' },
-    { label: 'dbt-core',     key: 'dbt-core' },
+    { label: 'dbt v2',       key: 'dbt-v2' },
+    { label: 'dbt v1',       key: 'dbt-v1' },
     { label: 'dbt-adapters', key: 'dbt-adapters' },
     { label: 'Orchestration',key: 'orchestration' },
   ];
@@ -216,14 +226,15 @@ function applyFilters() {
   const cards = document.querySelectorAll('.card');
   let visibleCards = 0;
   cards.forEach(c => {
-    const sevOk = activeSev === 'all' || c.dataset.severity === activeSev;
+    const sevOk = activeSev === 'all' || (SEV_RANK[c.dataset.severity] ?? 0) >= SEV_RANK[activeSev];
     const groupOk = activeGroup === 'all' || (GROUP_MAP[activeGroup] ?? []).includes(c.dataset.group);
+    const majorOk = !activeGroup.startsWith('dbt-v') || c.dataset.major === activeGroup.slice(5);
     const repoOk = activeRepo === 'all' || c.dataset.repo === activeRepo;
     const searchOk = !q ||
+      (c.dataset.text ??= c.textContent.toLowerCase()).includes(q) ||
       c.dataset.repo.toLowerCase().includes(q) ||
-      c.dataset.tags.toLowerCase().includes(q) ||
-      c.textContent.toLowerCase().includes(q);
-    const show = sevOk && groupOk && repoOk && searchOk;
+      c.dataset.tags.toLowerCase().includes(q);
+    const show = sevOk && groupOk && repoOk && searchOk && majorOk;
     c.classList.toggle('hidden', !show);
     if (show) visibleCards++;
   });
@@ -266,7 +277,8 @@ async function loadDigest() {
 }
 
 function updateCounts(records, advisories, pkgRecs, bqRecs = [], lhRecs = [], scwRecs = []) {
-  document.getElementById('digest-count').textContent = records.length || '';
+  const shown = records.filter(r => (SEV_RANK[r.analysis?.severity ?? 'none'] ?? 0) >= SEV_RANK[activeSev]).length;
+  document.getElementById('digest-count').textContent = shown || '';
   document.getElementById('advisory-count').textContent = advisories.length || '';
   const pkgBadge = document.getElementById('pkg-count');
   if (pkgBadge) {
@@ -307,6 +319,7 @@ function renderGrid(records) {
     const tags       = allTags.filter(t => t !== 'pre-release').slice(0, 3);
     const changes    = (a.key_changes ?? []).slice(0, 3);
 
+
     const changesList = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
     const tagChips    = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
     const preRelBadge = isPreRel
@@ -317,7 +330,8 @@ function renderGrid(records) {
   data-repo="${esc(r.repo)}"
   data-group="${esc(r.group ?? '')}"
   data-tags="${esc(allTags.join(' '))}"
-  data-severity="${esc(severity)}">
+  data-severity="${esc(severity)}"
+  data-major="${esc(majorOf(r.tag))}">
   <div class="card-header">
     <span class="card-repo">${esc(REPO_DISPLAY[r.repo] ?? r.repo.split('/')[1])}</span>
     <div style="display:flex;align-items:center;gap:6px;">${preRelBadge}<span class="sev sev-${safeSev(severity)}">${esc(severity)}</span></div>
@@ -332,6 +346,8 @@ function renderGrid(records) {
   </div>
 </article>`.trim();
   }).join('');
+
+  applyFilters();
 
   grid.querySelectorAll('.card').forEach(el => {
     el.addEventListener('click', () => {
