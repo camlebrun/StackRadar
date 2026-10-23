@@ -1,9 +1,9 @@
 ## 1. Design tokens
 
-- [ ] 1.1 Define the `:root` tokens in `public/style.css` (colours, radii, fonts) with a comment citing the portfolio source
-- [ ] 1.2 Pick severity colours and verify each pair reaches 4.5:1 with a small contrast script
-- [ ] 1.3 Add the Google Fonts link (Playfair Display, DM Sans) with `display=swap` to every page and set fallback stacks
-- [ ] 1.4 Restyle header, tabs, chips (pill), cards (white, 1rem), drawer and footer from the tokens; remove purple values and `prefers-color-scheme` rules
+- [x] 1.1 Define the `:root` tokens in `public/style.css` (colours, radii, fonts) with a comment citing the portfolio source
+- [x] 1.2 Pick severity colours and verify each pair reaches 4.5:1 with a small contrast script
+- [x] 1.3 Add the Google Fonts link (Playfair Display, DM Sans) with `display=swap` to every page and set fallback stacks
+- [x] 1.4 Restyle header, tabs, chips (pill), cards (white, 1rem), drawer and footer from the tokens; remove purple values and `prefers-color-scheme` rules
 
 ## 2. Shared modules
 
