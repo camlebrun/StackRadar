@@ -80,3 +80,46 @@ def test_list_release_keys_uses_prefix() -> None:
     keys = list_release_keys(s3, BUCKET)
     paginator.paginate.assert_called_once_with(Bucket=BUCKET, Prefix="releases/")
     assert keys == ["releases/owner/repo/v1.0.0.json"]
+
+
+def test_write_domain_digests_keys_and_security_payload() -> None:
+    import json
+
+    from src.store import write_domain_digests
+
+    s3 = MagicMock()
+    keys = write_domain_digests(
+        s3, "b", {"dbt": [{"tag": "v1", "body": "x"}], "gcp": []}, [{"id": "CVE-1"}]
+    )
+    assert set(keys) == {"dbt", "gcp", "security"}
+    assert keys["dbt"].startswith("digest-dbt-")
+    bodies = {c.kwargs["Key"]: json.loads(c.kwargs["Body"]) for c in s3.put_object.call_args_list}
+    assert bodies[keys["dbt"]]["releases"] == [{"tag": "v1"}]
+    assert bodies[keys["security"]] == {"releases": [], "advisories": [{"id": "CVE-1"}]}
+
+
+def test_manifest_lists_domain_digests_and_keeps_combined_key() -> None:
+    import json
+
+    from src.store import write_digest_json
+
+    s3 = MagicMock()
+    key = write_digest_json(s3, "b", [], [], {"dbt": "digest-dbt-1.json"})
+    manifest = next(
+        json.loads(c.kwargs["Body"])
+        for c in s3.put_object.call_args_list
+        if c.kwargs["Key"] == "manifest.json"
+    )
+    assert manifest["digest"] == key
+    assert manifest["digests"] == {"dbt": "digest-dbt-1.json"}
+
+
+def test_manifest_without_domains_has_no_digests_key() -> None:
+    import json
+
+    from src.store import write_digest_json
+
+    s3 = MagicMock()
+    write_digest_json(s3, "b", [])
+    manifest = json.loads(s3.put_object.call_args_list[-1].kwargs["Body"])
+    assert "digests" not in manifest

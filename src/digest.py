@@ -5,7 +5,12 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from src.config import DIGEST_DEFAULT_LIMIT, DIGEST_MAX_LIMIT
+from src.config import (
+    DIGEST_DEFAULT_LIMIT,
+    DIGEST_DOMAIN_LIMITS,
+    DIGEST_DOMAINS,
+    DIGEST_MAX_LIMIT,
+)
 from src.store import list_release_keys
 
 logger = logging.getLogger(__name__)
@@ -40,8 +45,12 @@ def _fetch_one(s3: Any, bucket: str, key: str) -> dict[str, Any] | None:
         return None
 
 
-def get_digest(s3: Any, bucket: str, limit: int = DIGEST_DEFAULT_LIMIT) -> list[dict[str, Any]]:
-    limit = min(limit, DIGEST_MAX_LIMIT)
+def get_digest(
+    s3: Any, bucket: str, limit: int | None = DIGEST_DEFAULT_LIMIT
+) -> list[dict[str, Any]]:
+    """Newest-first records; `limit=None` returns every stored release."""
+    if limit is not None:
+        limit = min(limit, DIGEST_MAX_LIMIT)
     keys = list_release_keys(s3, bucket)
     deprecated_map = _build_repo_overrides()
 
@@ -61,3 +70,21 @@ def get_digest(s3: Any, bucket: str, limit: int = DIGEST_DEFAULT_LIMIT) -> list[
 
     records.sort(key=lambda r: str(r.get("published_at", "")), reverse=True)
     return records[:limit]
+
+
+def split_by_domain(records: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Route newest-first records to their domain digest by `group`, applying per-domain caps."""
+    domain_of = {group: domain for domain, groups in DIGEST_DOMAINS.items() for group in groups}
+    domains: dict[str, list[dict[str, Any]]] = {domain: [] for domain in DIGEST_DOMAINS}
+    unmapped: set[str] = set()
+    for record in records:
+        group = str(record.get("group") or "")
+        if group in domain_of:
+            domains[domain_of[group]].append(record)
+        else:
+            unmapped.add(group)
+    if unmapped:
+        logger.warning("Records with unmapped group kept out of domain digests: %s", unmapped)
+    for domain, limit in DIGEST_DOMAIN_LIMITS.items():
+        domains[domain] = domains[domain][:limit]
+    return domains
