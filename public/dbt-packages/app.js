@@ -1,7 +1,7 @@
 'use strict';
 
-const R2_BASE = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev';
-const MANIFEST_URL = `${R2_BASE}/manifest.json`;
+import { esc, renderInline, formatDate, R2_BASE, MANIFEST_URL } from '../common.js';
+
 
 let allPkgs = [];
 let activePkgType = 'all';
@@ -378,19 +378,3 @@ function stripHtml(str) {
     .trim();
 }
 
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function renderInline(str) {
-  return esc(str).replace(/`([^`]+)`/g, '<code>$1</code>');
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
-  } catch { return iso; }
-}
