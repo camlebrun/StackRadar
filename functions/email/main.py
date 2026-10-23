@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import html
 import json
 import logging
 import smtplib
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -66,32 +68,62 @@ def _safe_text(s: str) -> str:
     )
 
 
+# Same display names as the site (public/app.js REPO_DISPLAY).
+_REPO_DISPLAY = {
+    "dagster-io/dagster": "Dagster",
+    "kestra-io/kestra": "Kestra",
+    "apache/airflow": "Airflow",
+}
+
+
+def _h(value: Any) -> str:
+    """HTML-escape LLM / GitHub text before it goes into the template."""
+    return html.escape(_safe_text(str(value)))
+
+
+def _format_date(iso: str) -> str:
+    try:
+        d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return f"{d:%b} {d.day}, {d.year}"
+
+
 def _render_card(r: dict[str, Any]) -> str:
+    """Same card as the site: repo, severity, serif title, date, summary, changes, tags."""
     a = r.get("analysis") or {}
     sev = a.get("severity", "none")
     repo = r.get("repo", "")
-    changes = a.get("key_changes", [])[:4]
+    changes = a.get("key_changes", [])[:3]
     changes_block = ""
     if changes:
         items = "".join(
             f'<li style="margin:6px 0;color:#5d6677;-webkit-text-fill-color:#5d6677;font-size:13px;line-height:1.5;">'
             f'<span style="color:#8d4f26;-webkit-text-fill-color:#8d4f26;font-weight:700;margin-right:8px;">&rsaquo;</span>'
-            f"{_safe_text(str(c))}</li>"
+            f"{_h(c)}</li>"
             for c in changes
         )
         changes_block = f'<ul style="margin:0;padding:0;list-style:none;">{items}</ul>'
+
+    tags = [t for t in a.get("tags", []) if t != "pre-release"][:3]
+    tags_block = "".join(
+        '<span style="display:inline-block;background:#f4ebe3;color:#8d4f26;border:1px solid #e8dbcf;'
+        f'border-radius:6px;padding:3px 8px;font-size:11px;font-weight:500;margin-right:6px;">{_h(t)}</span>'
+        for t in tags
+    )
 
     tpl = (_TEMPLATES / "email_card.html").read_text()
     return (
         tpl.replace("{{sev_bg}}", _SEV_BG.get(sev, _SEV_BG["none"]))
         .replace("{{sev_fg}}", _SEV_FG.get(sev, _SEV_FG["none"]))
-        .replace("{{severity}}", sev)
-        .replace("{{repo_owner}}", repo.split("/")[0])
-        .replace("{{repo_name}}", repo.split("/")[-1])
-        .replace("{{tag}}", str(r.get("tag", "")))
-        .replace("{{summary}}", _safe_text(a.get("summary", "No summary available.")))
+        .replace("{{severity}}", _h(sev))
+        .replace("{{repo_label}}", _h(_REPO_DISPLAY.get(repo, repo.split("/")[-1])))
+        .replace("{{title}}", _h(r.get("name") or r.get("tag", "")))
+        .replace("{{date}}", _format_date(str(r.get("published_at", ""))))
+        .replace("{{summary}}", _h(a.get("summary", "No summary available.")))
         .replace("{{changes_block}}", changes_block)
-        .replace("{{url}}", str(r.get("html_url", "#")))
+        .replace("{{tags_block}}", tags_block)
+        .replace("{{url}}", html.escape(str(r.get("html_url", "#"))))
     )
 
 
