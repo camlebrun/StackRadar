@@ -1,6 +1,6 @@
 'use strict';
 
-import { esc, formatDate, safeSev, R2_BASE, MANIFEST_URL } from '../common.js';
+import { esc, formatDate, safeSev, loadDomain, applyTabBadges } from '../common.js';
 
 
 const SEV_ORDER = { critical: 4, high: 3, medium: 2, low: 1, none: 0, unknown: 0 };
@@ -45,28 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadAdvisories() {
   const loading = document.getElementById('loading');
   try {
-    const manifest = await fetch(MANIFEST_URL, { cache: 'no-store' });
-    if (!manifest.ok) throw new Error(`manifest HTTP ${manifest.status}`);
-    const { digest } = await manifest.json();
-    const resp = await fetch(`${R2_BASE}/${digest}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data  = await resp.json();
-    allAdvisories = Array.isArray(data) ? [] : (data.advisories ?? []);
+    const { advisories, counts } = await loadDomain('security');
+    allAdvisories = advisories;
     allAdvisories.sort((a, b) =>
       (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0) ||
       new Date(b.published_at) - new Date(a.published_at)
     );
     loading.classList.add('hidden');
-    document.getElementById('total-count').textContent   = allAdvisories.length || '';
-    const releases = Array.isArray(data) ? data : (data.releases ?? []);
-    const nonPkg = releases.filter(r => r.group !== 'dbt-packages');
-    document.getElementById('release-count').textContent = nonPkg.length || '';
-    const pkgBadge = document.getElementById('pkg-count');
-    if (pkgBadge) {
-      const pkgUnique = new Set(releases.filter(r => r.group === 'dbt-packages').map(r => r.repo)).size;
-      pkgBadge.textContent = pkgUnique || '';
-      pkgBadge.title = `${pkgUnique} packages tracked · latest release per package`;
-    }
+    applyTabBadges({ ...counts, advisories: allAdvisories.length });
     buildRepoFilters(allAdvisories);
     renderAll();
     applyFilters();
