@@ -15,8 +15,8 @@ from src.analyser import (
     analyse_lakehouse_release,
     analyse_release,
 )
-from src.config import TelegramConfig
-from src.digest import get_digest
+from src.config import DIGEST_MAX_LIMIT, TelegramConfig
+from src.digest import compute_tab_counts, get_digest, split_by_domain
 from src.fetcher import (
     backfill_releases,
     fetch_gcp_docs_releases,
@@ -36,6 +36,7 @@ from src.store import (
     set_cursor,
     set_run_status,
     write_digest_json,
+    write_domain_digests,
     write_repo_advisories,
 )
 from src.telegram_notifier import (
@@ -482,15 +483,31 @@ def _process_advisories(
 def _build_and_clean_digest(s3: Any, bucket: str) -> tuple[list[dict[str, Any]], str]:
     """Phase 3 — write versioned digest JSON and remove stale digest files."""
     all_advisories = read_all_advisories(s3, bucket)
-    all_records = get_digest(s3, bucket, limit=500)
-    digest_key = write_digest_json(s3, bucket, all_records, all_advisories)
-    logger.info("%s: %d releases, %d advisories", digest_key, len(all_records), len(all_advisories))
+    all_records = get_digest(s3, bucket, limit=None)
+    domain_digests = write_domain_digests(s3, bucket, split_by_domain(all_records), all_advisories)
+    digest_key = write_digest_json(
+        s3,
+        bucket,
+        all_records[:DIGEST_MAX_LIMIT],
+        all_advisories,
+        domain_digests,
+        compute_tab_counts(all_records, all_advisories),
+    )
+    logger.info(
+        "%s: %d releases (combined capped at %d), %d advisories, domains: %s",
+        digest_key,
+        len(all_records),
+        DIGEST_MAX_LIMIT,
+        len(all_advisories),
+        sorted(domain_digests),
+    )
+    keep = {digest_key, *domain_digests.values()}
 
     paginator = s3.get_paginator("list_objects_v2")
     old_digests = []
     for page in paginator.paginate(Bucket=bucket, Prefix="digest-"):
         for obj in page.get("Contents", []):
-            if obj["Key"] != digest_key:
+            if obj["Key"] not in keep:
                 old_digests.append({"Key": obj["Key"]})
     if old_digests:
         s3.delete_objects(Bucket=bucket, Delete={"Objects": old_digests})

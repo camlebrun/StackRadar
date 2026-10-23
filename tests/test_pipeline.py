@@ -224,3 +224,35 @@ def test_rss_source_skips_llm_and_tags_by_product_and_category(mock_s3: MagicMoc
     assert stored["analysis"]["severity"] == "none"
     assert stored["product"] == "Functions"
     assert stored["category"] == "serverless"
+
+
+def test_cleanup_keeps_every_manifest_digest_and_deletes_stale() -> None:
+    from src.pipeline import _build_and_clean_digest
+
+    s3 = MagicMock()
+    paginator = MagicMock()
+    paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": k}
+                for k in (
+                    "digest-new.json",
+                    "digest-dbt-new.json",
+                    "digest-security-new.json",
+                    "digest-old.json",
+                    "digest-dbt-old.json",
+                )
+            ]
+        }
+    ]
+    s3.get_paginator.return_value = paginator
+    with (
+        patch(
+            "src.pipeline.write_domain_digests",
+            return_value={"dbt": "digest-dbt-new.json", "security": "digest-security-new.json"},
+        ),
+        patch("src.pipeline.write_digest_json", return_value="digest-new.json"),
+    ):
+        _build_and_clean_digest(s3, "b")
+    deleted = {o["Key"] for o in s3.delete_objects.call_args.kwargs["Delete"]["Objects"]}
+    assert deleted == {"digest-old.json", "digest-dbt-old.json"}

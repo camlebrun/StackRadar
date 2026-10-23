@@ -57,3 +57,70 @@ def test_body_stripped() -> None:
     blobs = {"releases/owner/repo/v1.json": _blob("v1", "2026-01-01T00:00:00Z", with_body=True)}
     result = get_digest(_mock_s3(blobs), BUCKET)
     assert "body" not in result[0]
+
+
+def _rec(group: str, tag: str, published_at: str) -> dict:
+    return {"group": group, "repo": f"o/{group}", "tag": tag, "published_at": published_at}
+
+
+def test_get_digest_without_limit_returns_everything() -> None:
+    blobs = {
+        f"releases/owner/repo/v{i}.json": _blob(f"v{i}", f"2026-01-{i:02d}T00:00:00Z")
+        for i in range(1, 11)
+    }
+    assert len(get_digest(_mock_s3(blobs), BUCKET, limit=None)) == 10
+
+
+def test_split_by_domain_routes_by_group() -> None:
+    from src.digest import split_by_domain
+
+    records = [
+        _rec("dbt-adapters", "1.0.0", "2026-01-01"),
+        _rec("bigquery", "b", "2026-01-02"),
+        _rec("scaleway", "s", "2026-01-03"),
+        _rec("orchestration", "o", "2026-01-04"),
+    ]
+    domains = split_by_domain(records)
+    assert [r["tag"] for r in domains["dbt"]] == ["1.0.0", "o"]
+    assert [r["tag"] for r in domains["gcp"]] == ["b"]
+    assert [r["tag"] for r in domains["scaleway"]] == ["s"]
+
+
+def test_split_by_domain_unmapped_group_excluded() -> None:
+    from src.digest import split_by_domain
+
+    domains = split_by_domain([_rec("mystery", "x", "2026-01-01")])
+    assert all(not recs for recs in domains.values())
+
+
+def test_scaleway_cap_does_not_evict_dbt_adapters() -> None:
+    from src.digest import split_by_domain
+
+    scaleway = [
+        _rec("scaleway", f"s{i}", f"2026-06-{i % 28 + 1:02d}T{i % 24:02d}") for i in range(338)
+    ]
+    adapters = [_rec("dbt-adapters", f"a{i}", f"2024-01-{i + 1:02d}") for i in range(27)]
+    domains = split_by_domain(scaleway + adapters)
+    assert len(domains["dbt"]) == 27
+    assert len(domains["scaleway"]) == 300
+
+
+def test_compute_tab_counts() -> None:
+    from src.digest import compute_tab_counts
+
+    records = [
+        _rec("dbt-core", "v1", "2026-01-01"),
+        _rec("orchestration", "v2", "2026-01-02"),
+        {**_rec("dbt-packages", "p1", "2026-01-03"), "repo": "a/pkg"},
+        {**_rec("dbt-packages", "p2", "2026-01-04"), "repo": "a/pkg"},
+        _rec("bigquery", "b", "2026-01-05"),
+        _rec("scaleway", "s", "2026-01-06"),
+    ]
+    assert compute_tab_counts(records, [{"id": 1}, {"id": 2}]) == {
+        "releases": 2,
+        "packages": 1,
+        "bigquery": 1,
+        "lakehouse": 0,
+        "scaleway": 1,
+        "advisories": 2,
+    }

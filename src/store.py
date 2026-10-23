@@ -142,34 +142,63 @@ def read_all_advisories(s3: Any, bucket: str) -> list[dict[str, Any]]:
     return all_advisories
 
 
+def _put_digest_file(
+    s3: Any,
+    bucket: str,
+    name: str | None,
+    records: list[dict[str, Any]],
+    advisories: list[dict[str, Any]] | None,
+) -> str:
+    """Write one immutable `digest[-<name>]-<timestamp>.json` and return its key."""
+    slim = [{k: v for k, v in r.items() if k != "body"} for r in records]
+    slim.sort(key=lambda r: str(r.get("published_at", "")), reverse=True)
+    payload: dict[str, Any] = {"releases": slim, "advisories": advisories or []}
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    key = f"digest-{name}-{ts}.json" if name else f"digest-{ts}.json"
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=json.dumps(payload, ensure_ascii=False).encode(),
+        ContentType="application/json",
+        CacheControl="public, max-age=31536000, immutable",
+    )
+    return key
+
+
+def write_domain_digests(
+    s3: Any,
+    bucket: str,
+    domains: dict[str, list[dict[str, Any]]],
+    advisories: list[dict[str, Any]] | None = None,
+) -> dict[str, str]:
+    """Write one digest per release domain plus a `security` digest. Returns domain -> key."""
+    keys = {name: _put_digest_file(s3, bucket, name, recs, None) for name, recs in domains.items()}
+    keys["security"] = _put_digest_file(s3, bucket, "security", [], advisories)
+    return keys
+
+
 def write_digest_json(
     s3: Any,
     bucket: str,
     records: list[dict[str, Any]],
     advisories: list[dict[str, Any]] | None = None,
+    domain_digests: dict[str, str] | None = None,
+    counts: dict[str, int] | None = None,
 ) -> str:
-    """Write versioned digest + manifest.json. Returns the digest key."""
-    slim = [{k: v for k, v in r.items() if k != "body"} for r in records]
-    slim.sort(key=lambda r: str(r.get("published_at", "")), reverse=True)
-    payload: dict[str, Any] = {"releases": slim, "advisories": advisories or []}
-    body = json.dumps(payload, ensure_ascii=False).encode()
-
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    digest_key = f"digest-{ts}.json"
-
-    s3.put_object(
-        Bucket=bucket,
-        Key=digest_key,
-        Body=body,
-        ContentType="application/json",
-        CacheControl="public, max-age=31536000, immutable",
-    )
+    """Write the combined digest + manifest.json. Returns the combined digest key."""
+    digest_key = _put_digest_file(s3, bucket, None, records, advisories)
+    manifest: dict[str, Any] = {
+        "digest": digest_key,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if domain_digests:
+        manifest["digests"] = domain_digests
+    if counts:
+        manifest["counts"] = counts
     s3.put_object(
         Bucket=bucket,
         Key="manifest.json",
-        Body=json.dumps(
-            {"digest": digest_key, "generated_at": datetime.now(timezone.utc).isoformat()}
-        ).encode(),
+        Body=json.dumps(manifest).encode(),
         ContentType="application/json",
         CacheControl="no-cache, must-revalidate",
     )

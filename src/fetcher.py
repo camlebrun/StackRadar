@@ -5,9 +5,9 @@ import re
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from xml.etree import ElementTree
 
 import requests
+from defusedxml import ElementTree
 
 from src.analyser import filter_trivial_changes
 from src.config import (
