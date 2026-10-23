@@ -61,3 +61,29 @@ def test_high_badge_uses_site_pair(email_main: ModuleType) -> None:
 def test_unknown_severity_falls_back_to_none(email_main: ModuleType) -> None:
     html = email_main._render_card(_release("banana"))
     assert "background:#ece6dc;color:#5d6677" in html
+
+
+def test_card_mirrors_site_structure(email_main: ModuleType) -> None:
+    release = {
+        **_release("high"),
+        "name": "dbt-core v2.0.5",
+        "published_at": "2026-09-18T10:00:00Z",
+        "analysis": {
+            "severity": "high",
+            "summary": "Fix.",
+            "key_changes": ["a", "b", "c", "d"],
+            "tags": ["bug-fix", "pre-release", "config-change"],
+        },
+    }
+    html = email_main._render_card(release)
+    assert ">dbt-core</td>" in html and "dbt-core v2.0.5</h3>" in html
+    assert "Sep 18, 2026" in html
+    assert html.count("&rsaquo;") == 3  # three key changes, like the site
+    assert "bug-fix" in html and "config-change" in html and "pre-release" not in html
+
+
+def test_card_escapes_untrusted_text(email_main: ModuleType) -> None:
+    release = _release("none")
+    release["analysis"]["summary"] = "<script>alert(1)</script>"
+    html = email_main._render_card(release)
+    assert "<script>" not in html and "&lt;script&gt;" in html

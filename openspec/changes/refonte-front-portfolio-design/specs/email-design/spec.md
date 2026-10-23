@@ -20,3 +20,14 @@ Severity badge colours in emails SHALL be the same background/text pairs as the 
 #### Scenario: Same palette
 - **WHEN** a `high` release is rendered in an email
 - **THEN** its badge uses `#f8e3cd` background and `#8a4300` text
+
+### Requirement: Email card mirrors the site card
+Each release in an email SHALL use the same structure as a site card: repo label (display name as on the site), severity pill, serif title (`name`, falling back to `tag`), date, summary, up to 3 key changes, up to 3 tags (without `pre-release`), and a link to the release. Text from releases SHALL be HTML-escaped.
+
+#### Scenario: Card content
+- **WHEN** a release named `dbt-core v2.0.5` with 4 key changes and tags `bug-fix`, `pre-release`, `config-change` is rendered
+- **THEN** the card shows that title, the formatted date, 3 key changes and the tags `bug-fix` and `config-change`
+
+#### Scenario: Untrusted markup
+- **WHEN** a summary contains `<script>`
+- **THEN** the email contains `&lt;script&gt;` and no `<script>` element
