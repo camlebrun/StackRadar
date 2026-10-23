@@ -31,3 +31,10 @@ The system SHALL delete digest files that the new manifest does not reference, a
 #### Scenario: Old digests removed
 - **WHEN** a run writes new digests while older `digest-*.json` files exist
 - **THEN** only files absent from the new manifest are deleted
+
+### Requirement: Manifest carries tab counts
+`manifest.json` SHALL contain a `counts` object with the exact number of `releases` (dbt, adapters and orchestration records), `packages` (distinct dbt-package repos), `bigquery`, `lakehouse`, `scaleway` and `advisories`, computed from every stored record, not from a capped digest.
+
+#### Scenario: Counts ignore caps
+- **WHEN** R2 stores 338 Scaleway records
+- **THEN** `counts.scaleway` is 338 although the `scaleway` digest holds 300

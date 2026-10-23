@@ -16,7 +16,7 @@ from src.analyser import (
     analyse_release,
 )
 from src.config import DIGEST_MAX_LIMIT, TelegramConfig
-from src.digest import get_digest, split_by_domain
+from src.digest import compute_tab_counts, get_digest, split_by_domain
 from src.fetcher import (
     backfill_releases,
     fetch_gcp_docs_releases,
@@ -486,7 +486,12 @@ def _build_and_clean_digest(s3: Any, bucket: str) -> tuple[list[dict[str, Any]],
     all_records = get_digest(s3, bucket, limit=None)
     domain_digests = write_domain_digests(s3, bucket, split_by_domain(all_records), all_advisories)
     digest_key = write_digest_json(
-        s3, bucket, all_records[:DIGEST_MAX_LIMIT], all_advisories, domain_digests
+        s3,
+        bucket,
+        all_records[:DIGEST_MAX_LIMIT],
+        all_advisories,
+        domain_digests,
+        compute_tab_counts(all_records, all_advisories),
     )
     logger.info(
         "%s: %d releases (combined capped at %d), %d advisories, domains: %s",

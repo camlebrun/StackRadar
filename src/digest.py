@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -88,3 +89,21 @@ def split_by_domain(records: list[dict[str, Any]]) -> dict[str, list[dict[str, A
     for domain, limit in DIGEST_DOMAIN_LIMITS.items():
         domains[domain] = domains[domain][:limit]
     return domains
+
+
+_NON_RELEASE_GROUPS = ("dbt-packages", "bigquery", "lakehouse", "scaleway")
+
+
+def compute_tab_counts(
+    records: list[dict[str, Any]], advisories: list[dict[str, Any]]
+) -> dict[str, int]:
+    """Exact badge counts for the frontend tabs, so a page need not load other domains."""
+    by_group = Counter(str(r.get("group") or "") for r in records)
+    return {
+        "releases": sum(n for g, n in by_group.items() if g not in _NON_RELEASE_GROUPS),
+        "packages": len({r["repo"] for r in records if r.get("group") == "dbt-packages"}),
+        "bigquery": by_group["bigquery"],
+        "lakehouse": by_group["lakehouse"],
+        "scaleway": by_group["scaleway"],
+        "advisories": len(advisories),
+    }

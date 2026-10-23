@@ -183,6 +183,7 @@ def write_digest_json(
     records: list[dict[str, Any]],
     advisories: list[dict[str, Any]] | None = None,
     domain_digests: dict[str, str] | None = None,
+    counts: dict[str, int] | None = None,
 ) -> str:
     """Write the combined digest + manifest.json. Returns the combined digest key."""
     digest_key = _put_digest_file(s3, bucket, None, records, advisories)
@@ -192,6 +193,8 @@ def write_digest_json(
     }
     if domain_digests:
         manifest["digests"] = domain_digests
+    if counts:
+        manifest["counts"] = counts
     s3.put_object(
         Bucket=bucket,
         Key="manifest.json",

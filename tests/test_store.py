@@ -123,3 +123,14 @@ def test_manifest_without_domains_has_no_digests_key() -> None:
     write_digest_json(s3, "b", [])
     manifest = json.loads(s3.put_object.call_args_list[-1].kwargs["Body"])
     assert "digests" not in manifest
+
+
+def test_manifest_includes_counts() -> None:
+    import json
+
+    from src.store import write_digest_json
+
+    s3 = MagicMock()
+    write_digest_json(s3, "b", [], [], None, {"releases": 3})
+    manifest = json.loads(s3.put_object.call_args_list[-1].kwargs["Body"])
+    assert manifest["counts"] == {"releases": 3}

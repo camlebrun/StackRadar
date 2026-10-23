@@ -19,6 +19,10 @@
 - [x] 4.3 Test manifest shape and cleanup keep-set
 - [x] 4.4 Run `pytest`, `ruff check`, `black --check`, `mypy --strict src`
 
-## 5. Verify
+## 5. Tab counts
 
-- [ ] 5.1 After deploy, read `manifest.json` and confirm `digests.dbt` lists all stored dbt-adapter releases
+- [x] 5.1 Add `compute_tab_counts` and write `counts` in `manifest.json` so a page can badge other tabs without loading their domain
+
+## 6. Verify
+
+- [ ] 6.1 After deploy, read `manifest.json` and confirm `digests.dbt` lists all stored dbt-adapter releases

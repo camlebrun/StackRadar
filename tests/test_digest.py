@@ -103,3 +103,24 @@ def test_scaleway_cap_does_not_evict_dbt_adapters() -> None:
     domains = split_by_domain(scaleway + adapters)
     assert len(domains["dbt"]) == 27
     assert len(domains["scaleway"]) == 300
+
+
+def test_compute_tab_counts() -> None:
+    from src.digest import compute_tab_counts
+
+    records = [
+        _rec("dbt-core", "v1", "2026-01-01"),
+        _rec("orchestration", "v2", "2026-01-02"),
+        {**_rec("dbt-packages", "p1", "2026-01-03"), "repo": "a/pkg"},
+        {**_rec("dbt-packages", "p2", "2026-01-04"), "repo": "a/pkg"},
+        _rec("bigquery", "b", "2026-01-05"),
+        _rec("scaleway", "s", "2026-01-06"),
+    ]
+    assert compute_tab_counts(records, [{"id": 1}, {"id": 2}]) == {
+        "releases": 2,
+        "packages": 1,
+        "bigquery": 1,
+        "lakehouse": 0,
+        "scaleway": 1,
+        "advisories": 2,
+    }
