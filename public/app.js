@@ -1,18 +1,21 @@
 /* git-release digest — Bento Grid Edition */
 'use strict';
 
-const _VALID_SEV = new Set(['critical', 'high', 'medium', 'low', 'none', 'unknown']);
-function safeSev(s) { return _VALID_SEV.has(s) ? s : 'none'; }
-
-// R2 public URL (CORS configured in Cloudflare dashboard)
-const R2_BASE = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev';
-const MANIFEST_URL = `${R2_BASE}/manifest.json`;
+import { esc, renderInline, formatDate, safeSev, R2_BASE, MANIFEST_URL } from './common.js';
 
 let allRecords = [];
 let allAdvisories = [];
-let activeSev = 'all';
+let activeSev = 'medium';
 let activeGroup = 'all';
 let activeRepo = 'all';
+
+function majorOf(tag) {
+  const m = /^v?(\d+)\./.exec(tag ?? '');
+  return m ? m[1] : '';
+}
+
+// Severity filter is "at least": the default hides none/low/unknown noise.
+const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1, none: 0, unknown: 0 };
 
 const REPO_DISPLAY = {
   'dagster-io/dagster':      'Dagster',
@@ -21,7 +24,8 @@ const REPO_DISPLAY = {
 };
 
 const GROUP_MAP = {
-  'dbt-core':     ['dbt-core'],
+  'dbt-v2':       ['dbt-core'],
+  'dbt-v1':       ['dbt-core'],
   'dbt-adapters': ['dbt-adapters'],
   orchestration:  ['orchestration'],
 };
@@ -155,7 +159,8 @@ function setupGroupChips() {
 
   const groups = [
     { label: 'All',          key: 'all' },
-    { label: 'dbt-core',     key: 'dbt-core' },
+    { label: 'dbt v2',       key: 'dbt-v2' },
+    { label: 'dbt v1',       key: 'dbt-v1' },
     { label: 'dbt-adapters', key: 'dbt-adapters' },
     { label: 'Orchestration',key: 'orchestration' },
   ];
@@ -221,14 +226,15 @@ function applyFilters() {
   const cards = document.querySelectorAll('.card');
   let visibleCards = 0;
   cards.forEach(c => {
-    const sevOk = activeSev === 'all' || c.dataset.severity === activeSev;
+    const sevOk = activeSev === 'all' || (SEV_RANK[c.dataset.severity] ?? 0) >= SEV_RANK[activeSev];
     const groupOk = activeGroup === 'all' || (GROUP_MAP[activeGroup] ?? []).includes(c.dataset.group);
+    const majorOk = !activeGroup.startsWith('dbt-v') || c.dataset.major === activeGroup.slice(5);
     const repoOk = activeRepo === 'all' || c.dataset.repo === activeRepo;
     const searchOk = !q ||
+      (c.dataset.text ??= c.textContent.toLowerCase()).includes(q) ||
       c.dataset.repo.toLowerCase().includes(q) ||
-      c.dataset.tags.toLowerCase().includes(q) ||
-      c.textContent.toLowerCase().includes(q);
-    const show = sevOk && groupOk && repoOk && searchOk;
+      c.dataset.tags.toLowerCase().includes(q);
+    const show = sevOk && groupOk && repoOk && searchOk && majorOk;
     c.classList.toggle('hidden', !show);
     if (show) visibleCards++;
   });
@@ -271,7 +277,8 @@ async function loadDigest() {
 }
 
 function updateCounts(records, advisories, pkgRecs, bqRecs = [], lhRecs = [], scwRecs = []) {
-  document.getElementById('digest-count').textContent = records.length || '';
+  const shown = records.filter(r => (SEV_RANK[r.analysis?.severity ?? 'none'] ?? 0) >= SEV_RANK[activeSev]).length;
+  document.getElementById('digest-count').textContent = shown || '';
   document.getElementById('advisory-count').textContent = advisories.length || '';
   const pkgBadge = document.getElementById('pkg-count');
   if (pkgBadge) {
@@ -312,6 +319,7 @@ function renderGrid(records) {
     const tags       = allTags.filter(t => t !== 'pre-release').slice(0, 3);
     const changes    = (a.key_changes ?? []).slice(0, 3);
 
+
     const changesList = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
     const tagChips    = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
     const preRelBadge = isPreRel
@@ -322,7 +330,8 @@ function renderGrid(records) {
   data-repo="${esc(r.repo)}"
   data-group="${esc(r.group ?? '')}"
   data-tags="${esc(allTags.join(' '))}"
-  data-severity="${esc(severity)}">
+  data-severity="${esc(severity)}"
+  data-major="${esc(majorOf(r.tag))}">
   <div class="card-header">
     <span class="card-repo">${esc(REPO_DISPLAY[r.repo] ?? r.repo.split('/')[1])}</span>
     <div style="display:flex;align-items:center;gap:6px;">${preRelBadge}<span class="sev sev-${safeSev(severity)}">${esc(severity)}</span></div>
@@ -338,6 +347,8 @@ function renderGrid(records) {
 </article>`.trim();
   }).join('');
 
+  applyFilters();
+
   grid.querySelectorAll('.card').forEach(el => {
     el.addEventListener('click', () => {
       const r = records[+el.dataset.idx];
@@ -349,32 +360,3 @@ function renderGrid(records) {
 // ── Security Advisories ────────────────────────────────────────────────────
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function stripMd(str) {
-  return String(str ?? '')
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`{1,3}[^`]*`{1,3}/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/^[-*+]\s+/gm, '')
-    .replace(/\n{2,}/g, ' ')
-    .replace(/\n/g, ' ')
-    .trim();
-}
-
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function renderInline(str) {
-  return esc(str).replace(/`([^`]+)`/g, '<code>$1</code>');
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
-  } catch { return iso; }
-}

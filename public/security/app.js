@@ -1,10 +1,7 @@
 'use strict';
 
-const R2_BASE      = 'https://pub-d7a866e02d744f3fb57bc3859858a5df.r2.dev';
-const MANIFEST_URL = `${R2_BASE}/manifest.json`;
+import { esc, formatDate, safeSev, R2_BASE, MANIFEST_URL } from '../common.js';
 
-const _VALID_SEV = new Set(['critical', 'high', 'medium', 'low', 'none', 'unknown']);
-function safeSev(s) { return _VALID_SEV.has(s) ? s : 'none'; }
 
 const SEV_ORDER = { critical: 4, high: 3, medium: 2, low: 1, none: 0, unknown: 0 };
 
@@ -276,15 +273,3 @@ function stripMd(str) {
     .replace(/\n{2,}/g, ' ').replace(/\n/g, ' ').trim();
 }
 
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
-  } catch { return iso; }
-}
