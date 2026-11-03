@@ -1,13 +1,17 @@
 /* git-release digest — Bento Grid Edition */
 'use strict';
 
-import { esc, renderInline, formatDate, safeSev, R2_BASE, MANIFEST_URL } from './common.js';
+import {
+  esc, renderInline, formatDate, safeSev, loadDomain, applyTabBadges, readQuery, writeQuery,
+} from './common.js';
+import { groupByMinor, minorOf } from './minor.js';
 
 let allRecords = [];
 let allAdvisories = [];
 let activeSev = 'medium';
 let activeGroup = 'all';
 let activeRepo = 'all';
+let releaseRecords = [];
 
 function majorOf(tag) {
   const m = /^v?(\d+)\./.exec(tag ?? '');
@@ -15,6 +19,7 @@ function majorOf(tag) {
 }
 
 // Severity filter is "at least": the default hides none/low/unknown noise.
+const NON_RELEASE_GROUPS = new Set(['dbt-packages', 'bigquery', 'lakehouse', 'scaleway']);
 const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1, none: 0, unknown: 0 };
 
 const REPO_DISPLAY = {
@@ -24,8 +29,8 @@ const REPO_DISPLAY = {
 };
 
 const GROUP_MAP = {
+  'dbt-core':     ['dbt-core'],
   'dbt-v2':       ['dbt-core'],
-  'dbt-v1':       ['dbt-core'],
   'dbt-adapters': ['dbt-adapters'],
   orchestration:  ['orchestration'],
 };
@@ -43,8 +48,26 @@ const REPO_CHIPS = {
   ],
 };
 
+const QUERY_SPEC = {
+  sev:   { def: 'medium', allowed: ['all', 'critical', 'high', 'medium'] },
+  group: { def: 'all', allowed: ['all', ...Object.keys(GROUP_MAP)] },
+  repo:  { def: 'all', allowed: Object.values(REPO_CHIPS).flat().map(r => r.repo) },
+  q:     { def: '' },
+};
+
+function restoreFilters() {
+  const q = readQuery(QUERY_SPEC);
+  activeSev = q.sev;
+  activeGroup = q.group;
+  const repoInGroup = (REPO_CHIPS[q.group] ?? []).some(r => r.repo === q.repo);
+  activeRepo = repoInGroup ? q.repo : 'all';
+  document.getElementById('search').value = q.q;
+  document.getElementById('sev-filter').value = activeSev;
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  restoreFilters();
   setupTabs();
   setupSearch();
   setupSevFilters();
@@ -159,15 +182,21 @@ function setupGroupChips() {
 
   const groups = [
     { label: 'All',          key: 'all' },
+    { label: 'dbt core',     key: 'dbt-core' },
     { label: 'dbt v2',       key: 'dbt-v2' },
-    { label: 'dbt v1',       key: 'dbt-v1' },
     { label: 'dbt-adapters', key: 'dbt-adapters' },
     { label: 'Orchestration',key: 'orchestration' },
   ];
 
   container.innerHTML = groups.map(g =>
-    `<button class="chip${g.key === 'all' ? ' active' : ''}" data-group="${g.key}">${g.label}</button>`
+    `<button class="chip${g.key === activeGroup ? ' active' : ''}" data-group="${g.key}">${g.label}</button>`
   ).join('');
+  if (REPO_CHIPS[activeGroup]) {
+    const repo = activeRepo;
+    showRepoChips(activeGroup);
+    activeRepo = repo;
+    sub.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.repo === repo));
+  }
 
   container.addEventListener('click', e => {
     const btn = e.target.closest('[data-group]');
@@ -220,113 +249,93 @@ function showRepoChips(group) {
 
 
 // ── Filters ────────────────────────────────────────────────────────────────
+const sevPasses = sev => activeSev === 'all' || (SEV_RANK[sev] ?? 0) >= SEV_RANK[activeSev];
+
+// A dbt-core minor row lists its releases; those below the severity threshold are hidden and counted.
+function filterMinorItems(card) {
+  let visible = 0;
+  const items = card.querySelectorAll('.minor-item');
+  items.forEach(li => {
+    const ok = sevPasses(li.dataset.severity);
+    li.hidden = !ok;
+    if (ok) visible++;
+  });
+  const hidden = items.length - visible;
+  card.querySelector('.minor-hidden').textContent = hidden ? `+${hidden} hidden` : '';
+  return visible > 0;
+}
+
+function majorOk(card) {
+  if (activeGroup === 'dbt-v2') return card.dataset.major === '2';
+  if (activeGroup === 'dbt-core') return card.dataset.major === '1';
+  return true;
+}
+
 function applyFilters() {
   const q = document.getElementById('search').value.trim().toLowerCase();
 
   const cards = document.querySelectorAll('.card');
   let visibleCards = 0;
   cards.forEach(c => {
-    const sevOk = activeSev === 'all' || (SEV_RANK[c.dataset.severity] ?? 0) >= SEV_RANK[activeSev];
+    const sevOk = c.classList.contains('card-minor') ? filterMinorItems(c) : sevPasses(c.dataset.severity);
     const groupOk = activeGroup === 'all' || (GROUP_MAP[activeGroup] ?? []).includes(c.dataset.group);
-    const majorOk = !activeGroup.startsWith('dbt-v') || c.dataset.major === activeGroup.slice(5);
     const repoOk = activeRepo === 'all' || c.dataset.repo === activeRepo;
     const searchOk = !q ||
       (c.dataset.text ??= c.textContent.toLowerCase()).includes(q) ||
       c.dataset.repo.toLowerCase().includes(q) ||
       c.dataset.tags.toLowerCase().includes(q);
-    const show = sevOk && groupOk && repoOk && searchOk && majorOk;
+    const show = sevOk && groupOk && repoOk && searchOk && majorOk(c);
     c.classList.toggle('hidden', !show);
     if (show) visibleCards++;
   });
 
   document.getElementById('empty-digest').classList.toggle('hidden', visibleCards > 0 || cards.length === 0);
+  updateDigestCount(releaseRecords);
+  writeQuery(QUERY_SPEC, {
+    sev: activeSev, group: activeGroup, repo: activeRepo,
+    q: document.getElementById('search').value.trim(),
+  });
 }
 
 // ── Data fetch ─────────────────────────────────────────────────────────────
 async function loadDigest() {
   const loading = document.getElementById('loading');
   try {
-    const manifest = await fetch(MANIFEST_URL, { cache: 'no-store' });
-    if (!manifest.ok) throw new Error(`manifest HTTP ${manifest.status}`);
-    const { digest } = await manifest.json();
-    const resp = await fetch(`${R2_BASE}/${digest}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    allRecords = Array.isArray(data) ? data : (data.releases ?? []);
-    allAdvisories = Array.isArray(data) ? [] : (data.advisories ?? []);
+    const { records, advisories, counts } = await loadDomain('dbt');
+    allRecords = records;
+    allAdvisories = advisories;
     loading.classList.add('hidden');
-    const nonPkg = allRecords.filter(r =>
-      r.group !== 'dbt-packages' &&
-      r.group !== 'bigquery' &&
-      r.repo !== 'google/bigquery' &&
-      r.group !== 'lakehouse' &&
-      r.repo !== 'google/lakehouse' &&
-      r.group !== 'scaleway' &&
-      r.repo !== 'scaleway/changelog'
-    );
-    const pkgRecs = allRecords.filter(r => r.group === 'dbt-packages');
-    const bqRecs  = allRecords.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
-    const lhRecs  = allRecords.filter(r => r.group === 'lakehouse' || r.repo === 'google/lakehouse');
-    const scwRecs = allRecords.filter(r => r.group === 'scaleway' || r.repo === 'scaleway/changelog');
+    const nonPkg = allRecords.filter(r => !NON_RELEASE_GROUPS.has(r.group));
     renderGrid(nonPkg);
-    updateCounts(nonPkg, allAdvisories, pkgRecs, bqRecs, lhRecs, scwRecs);
+    applyTabBadges(counts);
+    updateDigestCount(nonPkg);
   } catch (err) {
     loading.className = 'empty-state';
     loading.textContent = `⚠ Failed to load: ${err.message}`;
   }
 }
 
-function updateCounts(records, advisories, pkgRecs, bqRecs = [], lhRecs = [], scwRecs = []) {
-  const shown = records.filter(r => (SEV_RANK[r.analysis?.severity ?? 'none'] ?? 0) >= SEV_RANK[activeSev]).length;
+function updateDigestCount(records) {
+  const shown = records.filter(r => sevPasses(r.analysis?.severity ?? 'none')).length;
   document.getElementById('digest-count').textContent = shown || '';
-  document.getElementById('advisory-count').textContent = advisories.length || '';
-  const pkgBadge = document.getElementById('pkg-count');
-  if (pkgBadge) {
-    const pkgUnique = new Set(pkgRecs.map(r => r.repo)).size;
-    pkgBadge.textContent = pkgUnique || '';
-    pkgBadge.title = `${pkgUnique} packages tracked · latest release per package`;
-  }
-  const bqBadge = document.getElementById('bq-count');
-  if (bqBadge) {
-    bqBadge.textContent = bqRecs.length || '';
-    bqBadge.title = `${bqRecs.length} release windows tracked`;
-  }
-  const lhBadge = document.getElementById('lh-count');
-  if (lhBadge) {
-    lhBadge.textContent = lhRecs.length || '';
-    lhBadge.title = `${lhRecs.length} release windows tracked`;
-  }
-  const scwBadge = document.getElementById('scw-count');
-  if (scwBadge) {
-    scwBadge.textContent = scwRecs.length || '';
-    scwBadge.title = `${scwRecs.length} items tracked`;
-  }
 }
 
 // ── Bento Grid ─────────────────────────────────────────────────────────────
-function renderGrid(records) {
-  const grid = document.getElementById('grid');
-  if (!records.length) {
-    document.getElementById('empty-digest').classList.remove('hidden');
-    return;
-  }
+function releaseCard(r, idx) {
+  const a          = r.analysis ?? {};
+  const severity   = a.severity ?? 'none';
+  const allTags    = a.tags ?? [];
+  const isPreRel   = allTags.includes('pre-release');
+  const tags       = allTags.filter(t => t !== 'pre-release').slice(0, 3);
+  const changes    = (a.key_changes ?? []).slice(0, 3);
 
-  grid.innerHTML = records.map((r, idx) => {
-    const a          = r.analysis ?? {};
-    const severity   = a.severity ?? 'none';
-    const allTags    = a.tags ?? [];
-    const isPreRel   = allTags.includes('pre-release');
-    const tags       = allTags.filter(t => t !== 'pre-release').slice(0, 3);
-    const changes    = (a.key_changes ?? []).slice(0, 3);
+  const changesList = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
+  const tagChips    = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
+  const preRelBadge = isPreRel
+    ? `<span class="tag tag-prerelease">pre-release</span>`
+    : '';
 
-
-    const changesList = changes.map(c => `<li>${renderInline(c)}</li>`).join('');
-    const tagChips    = tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
-    const preRelBadge = isPreRel
-      ? `<span class="tag tag-prerelease">pre-release</span>`
-      : '';
-
-    return `<article class="card" data-idx="${idx}"
+  return `<article class="card" data-idx="${idx}"
   data-repo="${esc(r.repo)}"
   data-group="${esc(r.group ?? '')}"
   data-tags="${esc(allTags.join(' '))}"
@@ -345,12 +354,69 @@ function renderGrid(records) {
     <span class="card-cta">Details <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
   </div>
 </article>`.trim();
+}
+
+// One row per dbt-core minor: latest release up front, every release listed (collapsed) below.
+function minorCard(g, indexOf) {
+  const latest = g.latest;
+  const a = latest.analysis ?? {};
+  const items = g.releases.map(r => {
+    const sev = r.analysis?.severity ?? 'none';
+    return `<li class="minor-item" data-severity="${esc(sev)}">
+      <button type="button" class="minor-link" data-idx="${indexOf.get(r)}">${esc(r.tag)}</button>
+      <span class="card-date">${formatDate(r.published_at)}</span>
+      <span class="sev sev-${safeSev(sev)}">${esc(sev)}</span>
+    </li>`;
+  }).join('');
+
+  return `<article class="card card-minor" data-idx="${indexOf.get(latest)}"
+  data-repo="${esc(latest.repo)}"
+  data-group="${esc(latest.group ?? '')}"
+  data-tags="${esc((a.tags ?? []).join(' '))}"
+  data-severity="${esc(g.maxSeverity)}"
+  data-major="${g.major}">
+  <div class="card-header">
+    <span class="card-repo">dbt-core</span>
+    <span class="sev sev-${safeSev(g.maxSeverity)}">${esc(g.maxSeverity)}</span>
+  </div>
+  <h3 class="card-title">dbt-core ${esc(g.label)}</h3>
+  <p class="card-date">${g.releases.length} release${g.releases.length > 1 ? 's' : ''} · latest ${esc(latest.tag)} · ${formatDate(latest.published_at)}</p>
+  <p class="card-summary">${renderInline(a.summary ?? '')}</p>
+  <details class="minor-list">
+    <summary>Releases <span class="minor-hidden"></span></summary>
+    <ul>${items}</ul>
+  </details>
+</article>`.trim();
+}
+
+function renderGrid(records) {
+  const grid = document.getElementById('grid');
+  releaseRecords = records;
+  if (!records.length) {
+    document.getElementById('empty-digest').classList.remove('hidden');
+    return;
+  }
+
+  const indexOf = new Map(records.map((r, i) => [r, i]));
+  const minorRows = new Map(
+    groupByMinor(records.filter(r => r.group === 'dbt-core')).map(g => [g.label, g])
+  );
+  const placed = new Set();
+  grid.innerHTML = records.map((r, idx) => {
+    if (r.group !== 'dbt-core') return releaseCard(r, idx);
+    const label = minorOf(r.tag)?.label;
+    if (!label || placed.has(label)) return '';
+    placed.add(label);
+    return minorCard(minorRows.get(label), indexOf);
   }).join('');
 
   applyFilters();
 
   grid.querySelectorAll('.card').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', e => {
+      const link = e.target.closest('.minor-link');
+      if (link) return openDrawer(records[+link.dataset.idx]);
+      if (e.target.closest('details')) return;
       const r = records[+el.dataset.idx];
       if (r) openDrawer(r);
     });

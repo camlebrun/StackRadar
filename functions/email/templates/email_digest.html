@@ -6,32 +6,23 @@
   <title>StackRadar — Release Digest</title>
   <meta name="color-scheme" content="light only">
   <meta name="supported-color-schemes" content="light only">
+  <!-- Web fonts load in clients that allow them (Apple Mail, iOS); others use Georgia / Helvetica. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@500;700&display=swap">
 </head>
-<body style="margin:0;padding:0;background:#ede9fe;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-  <div style="background:linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%);min-height:100vh;">
+<body style="margin:0;padding:0;background:#f5f0e8;font-family:'DM Sans',Helvetica,Arial,sans-serif;">
+  <div style="background:#f5f0e8;">
   <div style="max-width:580px;margin:0 auto;padding:32px 20px 48px;">
 
     <!-- Header -->
-    <div style="background:rgba(255,255,255,0.95);border-radius:12px;border:1px solid rgba(139,92,246,0.08);padding:14px 20px;margin-bottom:28px;">
-      <table cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td style="vertical-align:middle;padding-right:8px;">
-            <div style="width:28px;height:28px;background:linear-gradient(135deg,#5b5fc7 0%,#8b5cf6 100%);border-radius:7px;text-align:center;line-height:28px;font-size:14px;">
-              <img src="{{icon_data_url}}" width="28" height="28" alt="📡" style="display:block;border-radius:7px;">
-            </div>
-          </td>
-          <td style="vertical-align:middle;">
-            <span style="font-size:17px;font-weight:700;letter-spacing:-0.02em;color:#5b5fc7;">StackRadar</span>
-          </td>
-        </tr>
-      </table>
+    <div style="background:#ffffff;border-radius:16px;border:1px solid #e6d8c8;padding:14px 20px;margin-bottom:28px;">
+      <span style="font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-size:19px;font-weight:700;color:#1b2230;">&#128225; StackRadar</span>
     </div>
 
     <!-- Title -->
-    <h1 style="margin:0 0 4px;color:#111827;font-size:24px;font-weight:700;letter-spacing:-0.03em;">
+    <h1 style="margin:0 0 4px;color:#1b2230;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-size:26px;font-weight:700;">
       {{count}} new release{{count_plural}}
     </h1>
-    <p style="margin:0 0 24px;color:#6b7280;font-size:13px;line-height:1.5;">
+    <p style="margin:0 0 24px;color:#5d6677;font-size:13px;line-height:1.5;">
       New releases detected across your tracked repositories.
     </p>
 
@@ -39,7 +30,7 @@
     {{cards}}
 
     <!-- Footer -->
-    <p style="margin:20px 0 0;color:#9ca3af;font-size:11px;text-align:center;">
+    <p style="margin:20px 0 0;color:#5d6677;font-size:11px;text-align:center;">
       Sent by StackRadar &middot; You're receiving this because you're tracking releases.
     </p>
 

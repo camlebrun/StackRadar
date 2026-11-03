@@ -1,6 +1,6 @@
 'use strict';
 
-import { esc, renderInline, formatDate, safeSev, R2_BASE, MANIFEST_URL } from '../common.js';
+import { esc, renderInline, formatDate, safeSev, loadDomain, applyTabBadges } from '../common.js';
 
 
 let allReleases = [];
@@ -17,56 +17,17 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadReleases() {
   const loading = document.getElementById('loading');
   try {
-    const manifest = await fetch(MANIFEST_URL, { cache: 'no-store' });
-    if (!manifest.ok) throw new Error(`manifest HTTP ${manifest.status}`);
-    const { digest } = await manifest.json();
-    const resp = await fetch(`${R2_BASE}/${digest}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const records = Array.isArray(data) ? data : (data.releases ?? []);
+    const { records, counts } = await loadDomain('gcp');
     allReleases = records.filter(r =>
       r.group === 'lakehouse' || r.repo === 'google/lakehouse'
     );
-    const advisories = Array.isArray(data) ? [] : (data.advisories ?? []);
     loading.classList.add('hidden');
-    setCrossTabCounts(records, advisories);
+    applyTabBadges(counts);
     buildTagFilters(allReleases);
     render();
   } catch (err) {
     loading.className = 'empty-state';
     loading.textContent = `⚠ Failed to load: ${err.message}`;
-  }
-}
-
-function setCrossTabCounts(releases, advisories) {
-  const el = id => document.getElementById(id);
-  const nonPkg = releases.filter(r =>
-    r.group !== 'dbt-packages' &&
-    r.group !== 'bigquery' &&
-    r.repo !== 'google/bigquery' &&
-    r.group !== 'lakehouse' &&
-    r.repo !== 'google/lakehouse' &&
-    r.group !== 'scaleway' &&
-    r.repo !== 'scaleway/changelog'
-  );
-  if (el('release-count'))  el('release-count').textContent  = nonPkg.length || '';
-  if (el('advisory-count')) el('advisory-count').textContent = advisories.length || '';
-  const pkgUnique = new Set(releases.filter(r => r.group === 'dbt-packages').map(r => r.repo)).size;
-  if (el('pkg-count')) el('pkg-count').textContent = pkgUnique || '';
-  const bqRecs = releases.filter(r => r.group === 'bigquery' || r.repo === 'google/bigquery');
-  if (el('bq-count')) {
-    el('bq-count').textContent = bqRecs.length || '';
-    el('bq-count').title = `${bqRecs.length} release windows tracked`;
-  }
-  const lhRecs = releases.filter(r => r.group === 'lakehouse' || r.repo === 'google/lakehouse');
-  if (el('lh-count')) {
-    el('lh-count').textContent = lhRecs.length || '';
-    el('lh-count').title = `${lhRecs.length} release windows tracked`;
-  }
-  const scwRecs = releases.filter(r => r.group === 'scaleway' || r.repo === 'scaleway/changelog');
-  if (el('scw-count')) {
-    el('scw-count').textContent = scwRecs.length || '';
-    el('scw-count').title = `${scwRecs.length} items tracked`;
   }
 }
 
